@@ -9,10 +9,12 @@
 
 1.1. **技术栈确认 (Technology Stack)**
 
-*   **前端 (Frontend):** Vue 3 (Composition API), TypeScript, Tailwind CSS, Pinia (for state management), Axios (for HTTP requests).
-*   **后端 (Backend):** Python 3.11+, FastAPI, SQLAlchemy (ORM), Pydantic (for data validation).
+*   **前端 (Frontend):** Next.js 15 + React 19 + TypeScript, Tailwind CSS + Shadcn/ui, React Hooks + Context API / Zustand (for state management), Axios / Fetch API (for HTTP requests).
+*   **后端 (Backend):** Next.js API Routes, Node.js 18+, Prisma / Sequelize (ORM), TypeScript (for data validation).
+*   **爬虫库:** Axios + Cheerio for HTML parsing.
 *   **数据库 (Database):** MySQL 8.0+.
-*   **Web 服务器 (Web Server):** Uvicorn.
+*   **Web 服务器 (Web Server):** Next.js built-in server / Node.js.
+*   **部署:** Vercel / 自托管 Node.js 服务器.
 
 1.2. **架构风格 (Architectural Style)**
 
@@ -26,13 +28,16 @@
 1.3. **数据流图 (Text-Based Data Flow)**
 
 *   **核心流程 1: 首次访问与令牌创建/验证**
-    `用户输入令牌 'yunyv-gre' -> 前端 POST /api/v1/token/validate {token: 'yunyv-gre'} -> 后端 API -> 查询 Users 表是否存在该 token -> [不存在] 创建新 User 记录 -> 返回 {is_new: true} -> [已存在] -> 返回 {is_new: false} -> 前端将 token 存入 localStorage 并加载用户数据`
+    `用户输入令牌 'yunyv-gre' -> 前端 POST /api/token/validate {token: 'yunyv-gre'} -> Next.js API Route -> 查询 Users 表是否存在该 token -> [不存在] 创建新 User 记录 -> 返回 {is_new: true} -> [已存在] -> 返回 {is_new: false} -> 前端将 token 存入 localStorage 并加载用户数据`
 
-*   **核心流程 2: 上传新词书**
-    `用户选择 .txt 文件并命名 'GRE 核心' -> 前端 POST /api/v1/wordlists (multipart/form-data) [文件, name='GRE 核心'] -> 后端 API -> 逐行读取文件内容 -> 对每个单词 text: [查询 Words 表 -> 若不存在, 创建新 Word 记录] -> 创建 Wordlist 记录 -> 创建 WordlistEntries 关联记录 -> 返回成功 -> 前端刷新词书列表`
+*   **核心流程 2: 词典数据获取**
+    `用户查询单词 'example' -> 前端 GET /api/dictionary?word=example&type=all -> Next.js API Route -> 查询 Words 表是否存在该单词 -> [不存在] 使用 Cheerio 爬取 Bing 词典 -> 存入 Words 表 -> 返回完整释义数据 -> [已存在] 直接返回缓存数据 -> 前端显示释义`
 
-*   **核心流程 3: 智能复习**
-    `用户点击 '智能复习' -> 前端 GET /api/v1/review/due -> 后端 API -> 查询 UserWordProgress 表 WHERE user_id = current_user AND next_review_date <= TODAY() -> 返回单词列表 JSON -> 前端进入专注学习模式, 载入单词队列 -> 用户按空格键完成一个单词 -> 前端 POST /api/v1/review/progress/{word_id} -> 后端 API -> 更新该单词的 UserWordProgress (stage+1, next_review_date 更新) -> 返回成功`
+*   **核心流程 3: 上传新词书**
+    `用户选择 .txt 文件并命名 'GRE 核心' -> 前端 POST /api/wordlists (multipart/form-data) [文件, name='GRE 核心'] -> Next.js API Route -> 逐行读取文件内容 -> 对每个单词 text: [查询 Words 表 -> 若不存在, 创建新 Word 记录] -> 创建 Wordlist 记录 -> 创建 WordlistEntries 关联记录 -> 返回成功 -> 前端刷新词书列表`
+
+*   **核心流程 4: 智能复习**
+    `用户点击 '智能复习' -> 前端 GET /api/review/due -> Next.js API Route -> 查询 UserWordProgress 表 WHERE user_id = current_user AND next_review_date <= TODAY() -> 返回单词列表 JSON -> 前端进入专注学习模式, 载入单词队列 -> 用户按空格键完成一个单词 -> 前端 POST /api/review/progress/{word_id} -> Next.js API Route -> 更新该单词的 UserWordProgress (stage+1, next_review_date 更新) -> 返回成功`
 
 ---
 
@@ -112,12 +117,13 @@
 #### **3. 后端 API 规范 (Backend API Specification)**
 
 **通用约定:**
-*   所有 API 均以 `/api/v1` 为前缀。
+*   所有 API 均以 `/api` 为前缀。
 *   认证: 所有需要用户身份的接口，都需要在 HTTP Header 中提供 `Authorization: Bearer <user_token>`。后端将通过此 token 查询对应的 `user_id`。
+*   响应格式: 统一使用 JSON 格式，包含 `success` 字段表示操作是否成功。
 
 ---
 
-**Endpoint:** `POST /api/v1/token/validate`
+**Endpoint:** `POST /api/token/validate`
 **描述:** 创建或验证一个用户令牌。这是用户进入系统的唯一入口。
 **认证:** 无 (此接口用于获取认证)
 
@@ -133,20 +139,90 @@
 *   **`200 OK`:** 令牌有效或创建成功。
     ```json
     {
-      "message": "Token is valid."
+      "success": true,
+      "message": "Token is valid.",
+      "is_new": false
     }
     ```
 *   **`400 Bad Request`:** 请求体格式错误。
     ```json
     {
-      "detail": "Token field is required."
+      "success": false,
+      "error": "Token field is required."
     }
     ```
-*   **`422 Unprocessable Entity`:** FastAPI 自动验证错误。
 
 ---
 
-**Endpoint:** `POST /api/v1/wordlists`
+**Endpoint:** `GET /api/dictionary`
+**描述:** 获取单个单词的详细释义。**内部逻辑:** 1. 查 `Words` 表缓存。2. 若命中，直接返回 `definition_data` 字段。3. 若未命中，使用 Cheerio 爬虫任务实时抓取 Bing 词典。4. 抓取成功后，将数据存入 `Words` 表，然后返回给前端。5. 抓取失败，返回错误。
+**认证:** 必需 (Bearer Token)
+
+**请求 (Request):**
+*   **查询参数 (Query Parameters):**
+    *   `word`: `string` - 需要查询的单词。
+    *   `type`: `string` - (可选) 释义类型，可选值: 'all', 'authoritative', 'bilingual', 'english'，默认为 'all'。
+    *   `test`: `boolean` - (可选) 测试模式，设置为 'true' 时分析网站结构而非提取单词数据。
+
+**响应 (Responses):**
+*   **`200 OK`:** 返回完整的单词释义 JSON 对象。
+    ```json
+    {
+      "success": true,
+      "word": "example",
+      "requestedType": "all",
+      "data": {
+        "pronunciation": "发音信息",
+        "pronunciationData": {
+          "american": {
+            "phonetic": "[ɪɡˈzæmpəl]",
+            "audioUrl": "音频URL"
+          },
+          "british": {
+            "phonetic": "[ɪɡˈzɑːmpəl]",
+            "audioUrl": "音频URL"
+          }
+        },
+        "definitions": {
+          "basic": [
+            {
+              "partOfSpeech": "n.",
+              "meaning": "例子，范例"
+            }
+          ],
+          "web": [
+            {
+              "meaning": "网络释义"
+            }
+          ]
+        },
+        "authoritativeDefinitions": [],
+        "bilingualDefinitions": [],
+        "englishDefinitions": [],
+        "sentences": []
+      }
+    }
+    ```
+*   **`404 Not Found`:** 在 Bing 词典中找不到该单词。
+    ```json
+    {
+      "success": false,
+      "error": "Word not found",
+      "message": "The word 'example' could not be found in the dictionary."
+    }
+    ```
+*   **`500 Internal Server Error`:** 后端爬虫抓取数据失败（网络问题、反爬等）。
+    ```json
+    {
+      "success": false,
+      "error": "Failed to fetch word data",
+      "message": "An unexpected error occurred while fetching data from the dictionary source."
+    }
+    ```
+
+---
+
+**Endpoint:** `POST /api/wordlists`
 **描述:** 上传一个新的词书文件，并为其命名。
 **认证:** 必需 (Bearer Token)
 
@@ -159,41 +235,51 @@
 *   **`201 Created`:** 词书创建成功。
     ```json
     {
+      "success": true,
       "id": 123,
       "name": "GRE 核心 3000",
       "word_count": 3000
     }
     ```
 *   **`400 Bad Request`:** 文件为空或 `name` 字段缺失。
+    ```json
+    {
+      "success": false,
+      "error": "File is empty or name field is missing."
+    }
+    ```
 
 ---
 
-**Endpoint:** `GET /api/v1/wordlists`
+**Endpoint:** `GET /api/wordlists`
 **描述:** 获取当前用户的所有词书列表。
 **认证:** 必需 (Bearer Token)
 
 **响应 (Responses):**
 *   **`200 OK`:**
     ```json
-    [
-      {
-        "id": 123,
-        "name": "GRE 核心 3000",
-        "word_count": 3000,
-        "created_at": "2025-09-29T10:00:00Z"
-      },
-      {
-        "id": 124,
-        "name": "经济学人高频词",
-        "word_count": 500,
-        "created_at": "2025-09-28T15:30:00Z"
-      }
-    ]
+    {
+      "success": true,
+      "wordlists": [
+        {
+          "id": 123,
+          "name": "GRE 核心 3000",
+          "word_count": 3000,
+          "created_at": "2025-09-29T10:00:00Z"
+        },
+        {
+          "id": 124,
+          "name": "经济学人高频词",
+          "word_count": 500,
+          "created_at": "2025-09-28T15:30:00Z"
+        }
+      ]
+    }
     ```
 
 ---
 
-**Endpoint:** `DELETE /api/v1/wordlists/{wordlist_id}`
+**Endpoint:** `DELETE /api/wordlists/{wordlist_id}`
 **描述:** 删除指定的词书及其所有关联的学习进度。
 **认证:** 必需 (Bearer Token)
 
@@ -202,55 +288,24 @@
     *   `wordlist_id`: `integer` - 要删除的词书 ID。
 
 **响应 (Responses):**
-*   **`204 No Content`:** 删除成功。
+*   **`200 OK`:** 删除成功。
+    ```json
+    {
+      "success": true,
+      "message": "Wordlist deleted successfully."
+    }
+    ```
 *   **`404 Not Found`:** 词书不存在或不属于当前用户。
-
----
-
-**Endpoint:** `GET /api/v1/wordlists/{wordlist_id}/words`
-**描述:** 获取指定词书中的单词列表。支持根据学习状态进行过滤。
-**认证:** 必需 (Bearer Token)
-
-**请求 (Request):**
-*   **路径参数 (Path Parameters):**
-    *   `wordlist_id`: `integer` - 词书 ID。
-*   **查询参数 (Query Parameters):**
-    *   `status`: `string` - (可选) 过滤条件。`"unlearned"`: 只返回尚未在 `UserWordProgress` 中有记录的单词; `"all"` 或不提供: 返回所有单词。
-
-**响应 (Responses):**
-*   **`200 OK`:** 返回单词文本列表。
     ```json
     {
-      "words": ["abandon", "abate", "abdicate", "..."]
-    }
-    ```
-*   **`404 Not Found`:** 词书不存在。
-
----
-
-**Endpoint:** `POST /api/v1/learning/session/complete`
-**描述:** 在“专注学习模式”下完成对一个词书所有新词的第一遍学习后调用。为这批单词批量创建初始学习进度记录。
-**认证:** 必需 (Bearer Token)
-
-**请求 (Request):**
-*   **请求体 (Request Body):** `application/json`
-    ```json
-    {
-      "wordlist_id": 123 // 完成学习的词书ID
-    }
-    ```
-
-**响应 (Responses):**
-*   **`200 OK`:**
-    ```json
-    {
-        "message": "Initial progress for 50 words in wordlist 123 has been created."
+      "success": false,
+      "error": "Wordlist not found."
     }
     ```
 
 ---
 
-**Endpoint:** `GET /api/v1/review/due`
+**Endpoint:** `GET /api/review/due`
 **描述:** 获取当前用户所有今日及之前到期的待复习单词。
 **认证:** 必需 (Bearer Token)
 
@@ -258,6 +313,7 @@
 *   **`200 OK`:** 返回待复习的单词列表。
     ```json
     {
+      "success": true,
       "words": ["abandon", "prosaic", "ubiquitous", "..."],
       "count": 25
     }
@@ -265,7 +321,7 @@
 
 ---
 
-**Endpoint:** `POST /api/v1/review/progress/{word_id}`
+**Endpoint:** `POST /api/review/progress/{word_id}`
 **描述:** 标记一个单词已完成本次复习。后端将根据艾宾浩斯逻辑更新其复习阶段和下一次复习日期。
 **认证:** 必需 (Bearer Token)
 
@@ -277,35 +333,19 @@
 *   **`200 OK`:**
     ```json
     {
+      "success": true,
       "word_id": 42,
       "new_review_stage": 3,
       "next_review_date": "2025-10-10"
     }
     ```
 *   **`404 Not Found`:** 该单词的学习进度记录不存在。
-
----
-
-**Endpoint:** `GET /api/v1/word/{word_text}`
-**描述:** 获取单个单词的详细释义。**内部逻辑:** 1. 查 `Words` 表缓存。2. 若命中，直接返回 `definition_data` 字段。3. 若未命中，触发爬虫任务实时抓取 Bing 词典。4. 抓取成功后，将数据存入 `Words` 表，然后返回给前端。5. 抓取失败，返回错误。
-**认证:** 必需 (Bearer Token)
-
-**请求 (Request):**
-*   **路径参数 (Path Parameters):**
-    *   `word_text`: `string` - 需要查询的单词。
-
-**响应 (Responses):**
-*   **`200 OK`:** 返回完整的单词释义 JSON 对象。
     ```json
     {
-      "word": "need",
-      "pronunciation": { ... },
-      "quick_definitions": [ ... ],
-      // ... 结构完全遵循 PRD 中定义的 JSON 格式
+      "success": false,
+      "error": "Progress record not found for this word."
     }
     ```
-*   **`404 Not Found`:** 在 Bing 词典中找不到该单词。
-*   **`503 Service Unavailable`:** 后端爬虫抓取数据失败（网络问题、反爬等）。
 
 
 
@@ -316,81 +356,79 @@
 4.1. **组件层级结构 (Component Hierarchy)**
 
 ```
-- App.vue (应用根组件，处理全局样式和路由视图)
-  - RouterView
-    - TokenEntryPage.vue (令牌输入/验证页)
-      - TokenInputForm.vue
-    - HomePage.vue (主页，用户进入后的仪表盘)
-      - BentoGridContainer.vue (Bento 网格布局容器)
-        - MyWordlistsCard.vue (我的词书卡片)
-          - UploadWordlistModal.vue (上传词书弹窗)
-            - FileUploader.vue
-          - WordlistItem.vue (可复用组件，展示单个词书)
-            - ActionButton.vue (学习/测试按钮)
-        - ReviewCenterCard.vue (复习中心卡片)
-          - SmartReviewButton.vue (显示待复习数并启动复习)
-    - LearningModePage.vue (专注学习模式页)
-      - WordDisplay.vue (负责在屏幕随机位置显示单个单词)
-      - WordDefinitionPanel.vue (单词释义浮动面板，默认隐藏)
-      - ControlBar.vue (固定在角落的控制条)
-        - ShuffleButton.vue
-        - SettingsButton.vue
-      - SettingsPanel.vue (从控制条弹出的设置面板)
-        - FontSizeSlider.vue
-        - PanelWidthSlider.vue
-        - ToggleSwitch.vue (用于自动发音、循环发音、即时巩固等)
-    - TestModePage.vue (全览测试模式页)
-      - WordGrid.vue (负责渲染所有单词卡片的网格)
-        - WordCard.vue (单个单词卡片，可翻转)
-      - ControlBar.vue (复用自学习模式的控制条)
-        - ShuffleButton.vue
-        - SettingsButton.vue
-      - SettingsPanel.vue (复用自学习模式的设置面板)
+- app/layout.tsx (应用根布局，处理全局样式和主题)
+  - app/page.tsx (主页，用户进入后的仪表盘)
+    - components/BentoGrid.tsx (Bento 网格布局容器)
+      - components/WordlistsCard.tsx (我的词书卡片)
+        - components/UploadWordlistModal.tsx (上传词书弹窗)
+        - components/WordlistItem.tsx (可复用组件，展示单个词书)
+      - components/ReviewCenterCard.tsx (复习中心卡片)
+    - app/learning/page.tsx (专注学习模式页)
+      - components/WordDisplay.tsx (负责在屏幕随机位置显示单个单词)
+      - components/WordDefinitionPanel.tsx (单词释义浮动面板，默认隐藏)
+      - components/ControlBar.tsx (固定在角落的控制条)
+        - components/ShuffleButton.tsx
+        - components/SettingsButton.tsx
+      - components/SettingsPanel.tsx (从控制条弹出的设置面板)
+    - app/test/page.tsx (全览测试模式页)
+      - components/WordGrid.tsx (负责渲染所有单词卡片的网格)
+        - components/WordCard.tsx (单个单词卡片，可翻转)
+    - app/token/page.tsx (令牌输入/验证页)
+      - components/TokenInputForm.tsx
 ```
 
-4.2. **核心组件接口定义 (Core Component Props & Emits)**
-
-*   **`WordlistItem.vue`**
-    *   **Props:**
-        *   `wordlist: { id: number, name: string, wordCount: number }` - 必需。包含要显示的词书信息。
-    *   **Emits:**
-        *   `start-learning(wordlistId: number)`: 当用户点击“开始学习”时触发。
-        *   `start-test(wordlistId: number)`: 当用户点击“全览测试”时触发。
-        *   `delete(wordlistId: number)`: 当用户点击删除按钮时触发。
-
-*   **`WordCard.vue`**
-    *   **Props:**
-        *   `wordText: string` - 必需。要显示的单词文本。
-        *   `wordDefinition: Object | null` - 必需。单词的完整释义对象。初始加载时可以为 `null`。
-    *   **State (Internal):**
-        *   `isFlipped: boolean` - 默认 `false`。控制卡片是否翻转以显示释义。
-        *   `isLoading: boolean` - 默认 `false`。控制是否显示释义加载状态。
-    *   **Logic:**
-        *   在 `onMounted` 或被点击时，如果 `wordDefinition` 为 `null`，则调用 API 获取释义并更新状态。
-        *   点击事件切换 `isFlipped` 的值。
-
-*   **`SettingsPanel.vue`**
-    *   **Props:**
-        *   `modelValue: boolean` - 控制面板的显示/隐藏 (for `v-model`)。
-        *   `isLearningMode: boolean` - 必需。用于判断是否显示“即时巩固”等特定模式下的选项。
-        *   `config: { fontSize: number, panelWidth: number, autoPlayAudio: boolean, loopAudio: boolean, instantConsolidation: boolean }` - 必需。当前的配置对象。
-    *   **Emits:**
-        *   `update:config(newConfig: Object)`: 当任何设置项发生变化时，发出带有完整新配置对象的事件，以便父组件更新。
-        *   `close`: 当用户点击关闭按钮时触发。
-
-4.3. **状态管理 (State Management - Pinia)**
-
-定义全局状态存储的结构，分为不同的模块 (stores)。
+4.2. **核心组件接口定义 (Core Component Props & Interfaces)**
 
 ```typescript
-// store/user.ts
+// components/WordlistItem.tsx
+interface WordlistItemProps {
+  wordlist: {
+    id: number;
+    name: string;
+    wordCount: number;
+  };
+  onStartLearning: (wordlistId: number) => void;
+  onStartTest: (wordlistId: number) => void;
+  onDelete: (wordlistId: number) => void;
+}
+
+// components/WordCard.tsx
+interface WordCardProps {
+  wordText: string;
+  wordDefinition: any | null;
+  isFlipped?: boolean;
+  onFlip?: () => void;
+}
+
+// components/SettingsPanel.tsx
+interface SettingsPanelProps {
+  isOpen: boolean;
+  config: {
+    fontSize: number;
+    panelWidth: number;
+    autoPlayAudio: boolean;
+    loopAudio: boolean;
+    instantConsolidation: boolean;
+  };
+  onConfigChange: (newConfig: SettingsState) => void;
+  onClose: () => void;
+  isLearningMode?: boolean;
+}
+```
+
+4.3. **状态管理 (State Management - React Hooks + Context API)**
+
+定义全局状态存储的结构，使用 React Context API 和自定义 Hooks。
+
+```typescript
+// types/user.ts
 export interface UserState {
   token: string | null; // e.g., "yunyv-gre-mastery-2025"
   isAuthenticated: boolean; // 根据 token 是否有效设置
   status: 'idle' | 'loading' | 'authenticated' | 'error';
 }
 
-// store/wordlists.ts
+// types/wordlist.ts
 export interface Wordlist {
   id: number;
   name: string;
@@ -402,11 +440,11 @@ export interface WordlistsState {
   status: 'idle' | 'loading' | 'success' | 'error';
 }
 
-// store/learning.ts
+// types/learning.ts
 export interface Word {
   id: number;
   word_text: string;
-  definition_data: Object | null;
+  definition_data: any | null;
 }
 export interface LearningState {
   sessionType: 'new' | 'review' | 'test' | null;
@@ -416,7 +454,7 @@ export interface LearningState {
   status: 'idle' | 'active' | 'finished';
 }
 
-// store/settings.ts
+// types/settings.ts
 export interface SettingsState {
   fontSize: number; // e.g., 24 (px)
   panelWidth: number; // e.g., 400 (px)
@@ -424,42 +462,61 @@ export interface SettingsState {
   loopAudio: boolean;
   instantConsolidation: boolean;
 }
+
+// hooks/useUser.ts
+export const useUser = () => {
+  // 用户状态管理逻辑
+};
+
+// hooks/useWordlist.ts
+export const useWordlist = () => {
+  // 词书状态管理逻辑
+};
+
+// hooks/useLearning.ts
+export const useLearning = () => {
+  // 学习状态管理逻辑
+};
+
+// hooks/useSettings.ts
+export const useSettings = () => {
+  // 设置状态管理逻辑
+};
 ```
 
 4.4. **前端目录结构 (Directory Structure)**
 
 ```
 /src
-  /api              // API 服务层，封装 Axios 调用
-    - auth.ts
-    - wordlists.ts
-    - words.ts
-  /assets           // 静态资源 (CSS, images)
-  /components       // 可复用 Vue 组件
-    /common         // 通用组件 (buttons, sliders, toggles)
-    /layout         // 布局组件 (BentoGridContainer.vue)
-    /wordlist       // 词书相关组件 (MyWordlistsCard.vue, WordlistItem.vue)
-    /learning       // 学习/测试模式相关组件 (WordDisplay.vue, WordCard.vue)
-  /composables      // Vue Composition API 可复用逻辑
-    - useWordDefinition.ts // 封装单词释义获取和缓存逻辑
-  /router           // Vue Router 配置
-    - index.ts
-  /store            // Pinia 状态管理
-    - index.ts
-    - user.ts
-    - wordlists.ts
-    - learning.ts
-    - settings.ts
-  /types            // TypeScript 类型定义
-    - index.ts      // 导出所有类型
-  /views (or /pages)  // 页面级组件
-    - HomePage.vue
-    - TokenEntryPage.vue
-    - LearningModePage.vue
-    - TestModePage.vue
-    - NotFoundPage.vue
-  App.vue
-  main.ts
+  /app              # Next.js App Router
+    /api             # API 路由
+      /dictionary    # 词典 API
+      /token         # 令牌验证 API
+      /wordlists     # 词书管理 API
+      /review        # 复习进度 API
+    /learning        # 学习模式页面
+    /test            # 测试模式页面
+    /token           # 令牌验证页面
+    layout.tsx       # 根布局
+    page.tsx         # 主页
+  /components       # React 组件
+    /ui             # 基础 UI 组件 (shadcn/ui)
+    /wordlist       # 词书相关组件
+    /learning       # 学习/测试模式相关组件
+  /lib              # 工具库
+    /utils.ts       # 通用工具函数
+    /dictionary.ts   # 词典相关功能
+    /api.ts         # API 客户端封装
+  /types            # TypeScript 类型定义
+    /index.ts       # 导出所有类型
+  /hooks            # 自定义 React Hooks
+    - useDictionary.ts
+    - useWordlist.ts
+    - useSettings.ts
+    - useUser.ts
+  /styles           # 样式文件
+    - globals.css
+  /public           # 静态资源
 ```
 
 ---
@@ -467,47 +524,87 @@ export interface SettingsState {
 
 以伪代码形式详细描述后端最关键的算法和流程。
 
-*   **5.1. "智能复习" 单词获取逻辑 (后端)**
-    *   **触发:** `GET /api/v1/review/due`
+*   **5.1. 词典数据获取逻辑 (后端)**
+    *   **触发:** `GET /api/dictionary?word=example&type=all`
     *   **逻辑:**
-        ```pseudocode
-        FUNCTION getReviewWords(user_id: integer):
-          // 1. 获取当前服务器日期
-          current_date = TODAY()
-
-          // 2. 查询数据库
-          // 查询 UserWordProgress 表中，属于当前用户，
-          // 且 next_review_date 小于或等于今天的记录。
-          // 同时，连接 Words 表以获取单词文本。
-          progress_records = DB.query(
-            SELECT
-              Words.word_text
-            FROM UserWordProgress
-            JOIN Words ON UserWordProgress.word_id = Words.id
-            WHERE
-              UserWordProgress.user_id = :user_id AND
-              UserWordProgress.next_review_date <= :current_date
-          )
-
-          // 3. 提取单词文本列表
-          word_list = [record.word_text for record in progress_records]
-
-          // 4. 返回结果
-          RETURN {
-            "words": word_list,
-            "count": length(word_list)
+        ```javascript
+        async function getWordDefinition(word, type = 'all') {
+          // 1. 检查数据库缓存
+          const cachedWord = await db.query(
+            'SELECT * FROM Words WHERE word_text = ?',
+            [word]
+          );
+          
+          if (cachedWord.length > 0) {
+            // 2. 缓存命中，直接返回
+            return {
+              success: true,
+              word: word,
+              data: JSON.parse(cachedWord[0].definition_data)
+            };
           }
+          
+          // 3. 缓存未命中，使用爬虫获取数据
+          try {
+            const scrapedData = await dictionaryScraper.scrapeWord(word, type);
+            
+            if (scrapedData.success) {
+              // 4. 存入数据库缓存
+              await db.query(
+                'INSERT INTO Words (word_text, definition_data) VALUES (?, ?)',
+                [word, JSON.stringify(scrapedData.data)]
+              );
+              
+              return scrapedData;
+            } else {
+              return scrapedData;
+            }
+          } catch (error) {
+            // 5. 爬取失败处理
+            return {
+              success: false,
+              word: word,
+              error: 'Failed to fetch word data'
+            };
+          }
+        }
         ```
 
-*   **5.2. 单词完成复习逻辑 (后端)**
-    *   **触发:** `POST /api/v1/review/progress/{word_id}`
+*   **5.2. "智能复习" 单词获取逻辑 (后端)**
+    *   **触发:** `GET /api/review/due`
     *   **逻辑:**
-        ```pseudocode
-        FUNCTION markWordAsReviewed(user_id: integer, word_id: integer):
+        ```javascript
+        async function getReviewWords(userId) {
+          // 1. 获取当前服务器日期
+          const currentDate = new Date().toISOString().split('T')[0];
+          
+          // 2. 查询数据库
+          const progressRecords = await db.query(`
+            SELECT w.word_text
+            FROM UserWordProgress uwp
+            JOIN Words w ON uwp.word_id = w.id
+            WHERE uwp.user_id = ? AND uwp.next_review_date <= ?
+          `, [userId, currentDate]);
+          
+          // 3. 提取单词文本列表
+          const wordList = progressRecords.map(record => record.word_text);
+          
+          // 4. 返回结果
+          return {
+            success: true,
+            words: wordList,
+            count: wordList.length
+          };
+        }
+        ```
+
+*   **5.3. 单词完成复习逻辑 (后端)**
+    *   **触发:** `POST /api/review/progress/{word_id}`
+    *   **逻辑:**
+        ```javascript
+        async function markWordAsReviewed(userId, wordId) {
           // 1. 定义艾宾浩斯复习间隔 (以天为单位)
-          // 键: 当前 stage (完成本次复习后即将进入的 stage)
-          // 值: 距离下一次复习的天数
-          EBBINGHAUS_INTERVAL_MAP = {
+          const EBBINGHAUS_INTERVAL_MAP = {
             1: 1,  // stage 0 -> 1, 间隔 1 天
             2: 2,  // stage 1 -> 2, 间隔 2 天
             3: 4,  // stage 2 -> 3, 间隔 4 天
@@ -515,87 +612,120 @@ export interface SettingsState {
             5: 15, // stage 4 -> 5, 间隔 15 天
             6: 30,
             7: 60
-            // ... 可继续扩展
-          }
-          MAX_STAGE = max(keys(EBBINGHAUS_INTERVAL_MAP))
-
+          };
+          const MAX_STAGE = Math.max(...Object.keys(EBBINGHAUS_INTERVAL_MAP).map(Number));
+          
           // 2. 查找用户的单词进度记录
-          progress = DB.find_one(UserWordProgress, WHERE user_id = :user_id AND word_id = :word_id)
-          IF progress IS NULL:
-            RAISE NotFoundError("Progress for this word not found for the user.")
-
-          // 3. 计算新的复习阶段和下一次复习日期
-          current_stage = progress.review_stage
-          next_stage = current_stage + 1
-
-          // 4. 获取复习间隔
-          // 如果超出预设的最大阶段，则使用最长的间隔
-          interval_days = EBBINGHAUS_INTERVAL_MAP.get(next_stage, EBBINGHAUS_INTERVAL_MAP[MAX_STAGE])
-
-          // 5. 计算新的复习日期
-          new_review_date = TODAY() + interval_days
-
-          // 6. 更新数据库记录
-          DB.update(
-            progress,
-            SET
-              review_stage = next_stage,
-              next_review_date = new_review_date,
-              last_reviewed_at = NOW()
-          )
-          DB.commit()
-
-          // 7. 返回成功响应
-          RETURN {
-            "word_id": word_id,
-            "new_review_stage": next_stage,
-            "next_review_date": format_date(new_review_date)
+          const progress = await db.query(
+            'SELECT * FROM UserWordProgress WHERE user_id = ? AND word_id = ?',
+            [userId, wordId]
+          );
+          
+          if (progress.length === 0) {
+            throw new Error('Progress for this word not found for the user.');
           }
+          
+          // 3. 计算新的复习阶段和下一次复习日期
+          const currentStage = progress[0].review_stage;
+          const nextStage = currentStage + 1;
+          
+          // 4. 获取复习间隔
+          const intervalDays = EBBINGHAUS_INTERVAL_MAP[nextStage] ||
+                               EBBINGHAUS_INTERVAL_MAP[MAX_STAGE];
+          
+          // 5. 计算新的复习日期
+          const newReviewDate = new Date();
+          newReviewDate.setDate(newReviewDate.getDate() + intervalDays);
+          
+          // 6. 更新数据库记录
+          await db.query(`
+            UPDATE UserWordProgress
+            SET review_stage = ?, next_review_date = ?, last_reviewed_at = NOW()
+            WHERE user_id = ? AND word_id = ?
+          `, [nextStage, newReviewDate.toISOString().split('T')[0], userId, wordId]);
+          
+          // 7. 返回成功响应
+          return {
+            success: true,
+            word_id: wordId,
+            new_review_stage: nextStage,
+            next_review_date: newReviewDate.toISOString().split('T')[0]
+          };
+        }
         ```
 
-*   **5.3. 词书上传与单词入库逻辑 (后端)**
-    *   **触发:** `POST /api/v1/wordlists`
+*   **5.4. 词书上传与单词入库逻辑 (后端)**
+    *   **触发:** `POST /api/wordlists`
     *   **逻辑:**
-        ```pseudocode
-        FUNCTION uploadWordlist(user_id: integer, file_content: string, wordlist_name: string):
+        ```javascript
+        async function uploadWordlist(userId, fileContent, wordlistName) {
           // 1. 解析文件内容为单词列表
-          // 按行分割，去除首尾空格，过滤空行，转换为小写
-          words_from_file = [line.strip().lower() for line in file_content.splitlines() if line.strip()]
-          unique_words = unique(words_from_file)
-
-          // 2. [事务开始]
-          DB.begin_transaction()
-
-          // 3. 查找或创建单词记录
-          // 目标: 获取所有单词在 Words 表中的 ID
-          word_ids = []
-          for word_text in unique_words:
-            // 尝试查找
-            word_record = DB.find_one(Words, WHERE word_text = :word_text)
-            IF word_record IS NULL:
-              // 如果不存在，则创建。definition_data 此时可以为空或默认值，
-              // 之后通过 JIT 方式填充。
-              new_word = DB.create(Words, word_text=word_text, definition_data={})
-              word_ids.append(new_word.id)
-            ELSE:
-              word_ids.append(word_record.id)
-
-          // 4. 创建词书记录
-          new_wordlist = DB.create(Wordlists, user_id=user_id, name=wordlist_name)
-
-          // 5. 批量创建关联记录
-          entries_to_create = []
-          for word_id in word_ids:
-            entries_to_create.append({wordlist_id: new_wordlist.id, word_id: word_id})
-          DB.bulk_create(WordlistEntries, entries_to_create)
-
-          // 6. [事务提交]
-          DB.commit()
-
-          // 7. 返回成功响应
-          RETURN {
-            "id": new_wordlist.id,
-            "name": new_wordlist.name,
-            "word_count": length(unique_words)
+          const wordsFromFile = fileContent
+            .split('\n')
+            .map(line => line.trim().toLowerCase())
+            .filter(line => line.length > 0);
+          
+          const uniqueWords = [...new Set(wordsFromFile)];
+          
+          // 2. 开始事务
+          const connection = await db.getConnection();
+          await connection.beginTransaction();
+          
+          try {
+            // 3. 查找或创建单词记录
+            const wordIds = [];
+            for (const wordText of uniqueWords) {
+              // 尝试查找
+              const [existingWord] = await connection.query(
+                'SELECT id FROM Words WHERE word_text = ?',
+                [wordText]
+              );
+              
+              if (existingWord.length === 0) {
+                // 如果不存在，则创建
+                const [newWord] = await connection.query(
+                  'INSERT INTO Words (word_text, definition_data) VALUES (?, ?)',
+                  [wordText, '{}']
+                );
+                wordIds.push(newWord.insertId);
+              } else {
+                wordIds.push(existingWord[0].id);
+              }
+            }
+            
+            // 4. 创建词书记录
+            const [newWordlist] = await connection.query(
+              'INSERT INTO Wordlists (user_id, name) VALUES (?, ?)',
+              [userId, wordlistName]
+            );
+            
+            // 5. 批量创建关联记录
+            const entriesToCreate = wordIds.map(wordId => [
+              newWordlist.insertId,
+              wordId
+            ]);
+            
+            await connection.query(
+              'INSERT INTO WordlistEntries (wordlist_id, word_id) VALUES ?',
+              [entriesToCreate]
+            );
+            
+            // 6. 提交事务
+            await connection.commit();
+            
+            // 7. 返回成功响应
+            return {
+              success: true,
+              id: newWordlist.insertId,
+              name: wordlistName,
+              word_count: uniqueWords.length
+            };
+          } catch (error) {
+            // 8. 错误处理，回滚事务
+            await connection.rollback();
+            throw error;
+          } finally {
+            connection.release();
           }
+        }
         ```

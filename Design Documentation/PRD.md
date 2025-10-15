@@ -52,7 +52,8 @@
   - **用户场景:** yunyv 在 Windows PC 上使用令牌 `yunyv-gre` 学习了一小时。之后打开 iPad 上的浏览器，在初始页面输入 `yunyv-gre`，页面将立即加载出他在 PC 上的所有词书和学习进度。
 - **FR-1.3: 本地令牌缓存**
   - **描述:** 为提升日常使用便利性，系统会将当前已验证通过的令牌存储在浏览器的`localStorage`中。
-  - **用户体验:** 在同一设备和浏览器上，用户只需输入一次令牌。后续访问将自动“登录”，无需重复输入。**清除浏览器缓存不会导致数据丢失**，只需重新输入令牌即可恢复所有云端数据。
+  - **实现方式:** 使用 React Context API 管理认证状态，结合 localStorage 进行持久化存储。
+  - **用户体验:** 在同一设备和浏览器上，用户只需输入一次令牌。后续访问将自动"登录"，无需重复输入。**清除浏览器缓存不会导致数据丢失**，只需重新输入令牌即可恢复所有云端数据。
 
 #### **模块 2: 词书管理 (Wordlist Management)**
 
@@ -79,10 +80,10 @@
   - **交互流程:**
     1.  进入模式，系统从当前激活词书中随机展示一个**未学习过**的单词。
     2.  用户看着单词，进行**主动回忆**。
-    3.  用户**单击单词**查看释义，进行自我核对。
+    3.  用户**单击单词**查看释义，进行自我核对。释义通过 Next.js API 路由实时获取。
     4.  用户按下**键盘空格键**，当前单词消失，系统随机展示下一个未学习的单词。
-    5.  在任何时候，用户可点击**“随机打乱”**按钮，当前屏幕上单词的位置会立即重新随机排列，以打破位置记忆。
-    6.  当该词书中所有单词都被学习过一遍后，系统提示“本轮学习完成”。同时，后端将这批单词的学习记录（`user_id`, `word_id`, `review_stage=0`, `next_review_date=明天`）存入数据库。
+    5.  在任何时候，用户可点击**"随机打乱"**按钮，当前屏幕上单词的位置会立即重新随机排列，以打破位置记忆。
+    6.  当该词书中所有单词都被学习过一遍后，系统提示"本轮学习完成"。同时，Next.js API 将这批单词的学习记录（`user_id`, `word_id`, `review_stage=0`, `next_review_date=明天`）存入 MySQL 数据库。
 - **FR-3.2: 全览测试模式 (All-View Test Mode)**
   - **用途:** 自我检测、手动复习、考前冲刺。
   - **触发:** 在“我的词书”中选择一本词书，点击“全览测试”进入此模式。
@@ -103,7 +104,7 @@
     - **智能复习 (Smart Review):**
       - **逻辑:** 后端根据`UserWordProgress`表，查询出所有`next_review_date`为今天及今天之前的单词。
       - **界面:** 在主页上显示一个醒目的数字，如“**今日待复习：25**”。
-      - **流程:** 用户点击后，直接进入**专注学习模式**，但单词源为这些到期的复习词汇。每按一次空格键完成一个单词的复习，后端会自动更新其`review_stage`并计算下一个`next_review_date`。
+      - **流程:** 用户点击后，直接进入**专注学习模式**，但单词源为这些到期的复习词汇。每按一次空格键完成一个单词的复习，Next.js API 会自动更新其`review_stage`并计算下一个`next_review_date`。
 - **FR-4.2: 艾宾浩斯记忆曲线逻辑**
   - **描述:** “智能复习”功能背后的核心调度算法。
   - **复习阶段 (Review Stage) 定义 (示例):**
@@ -134,28 +135,148 @@
     1.  当学习/复习会话开始时，前端根据即将显示的单词顺序，向后端请求第一个单词的释义。
     2.  同时，前端会异步地**预先请求接下来 10 个单词的释义**并缓存，以确保用户按下空格键切换时能瞬时显示。
 - **FR-6.2: 词典数据源与字段**
-  - **数据源:** Bing 词典 (Web)。
-  - **需获取的数据字段:** 快速释义、权威英汉双解、英英释义、音标（英/美）、发音音频 URL（英/美）、高质量例句（最多 10 条，含翻译）。
-  - **后端任务:** 当后端收到一个在`Words`缓存表中不存在的单词请求时，触发爬虫任务抓取 Bing 词典数据，清洗后存入`Words`表，再返回给前端。
+  - **数据源:** Bing 词典 (移动版)。
+  - **需获取的数据字段:** 快速释义、权威英汉双解、英汉释义、英英释义、音标（英/美）、发音音频 URL（英/美）、高质量例句（最多 10 条，含翻译）、词形变换。
+  - **后端任务:** 当后端收到一个在`Words`缓存表中不存在的单词请求时，Next.js API 路由触发爬虫任务抓取 Bing 词典数据，使用 Cheerio 解析 HTML，清洗后存入`Words`表，再返回给前端。
+  - **实现技术:** 使用 Axios 发送 HTTP 请求，Cheerio 解析 HTML，TypeScript 定义数据结构。
 - **FR-6.3: 错误处理**
-  - **约定:** V1.0 版本假定 Bing 词典源稳定可靠，不设计复杂的降级方案或备用数据源。若因网络或反爬导致获取失败，则该单词的信息面板显示“释义获取失败”。
+  - **约定:** V1.0 版本假定 Bing 词典源稳定可靠，实现基本的错误处理和重试机制。
+  - **网络错误:** 实现请求超时控制（10秒）和自动重试（最多3次）。
+  - **解析错误:** 使用多重选择器策略，部分数据提取失败时不影响整体流程。
+  - **降级方案:** 若因网络或反爬导致获取失败，则该单词的信息面板显示"释义获取失败"，并提供手动重试按钮。
 
 ---
 
 ### **3. 技术规格与非功能性需求 (Technical & Non-Functional Requirements)**
 
 #### **3.1. 技术栈**
- Next.js + Tailwind CSS + Shadcn/ui 
-- **数据库:** MySQL
+- **前端框架:** Next.js 15 + React 19 + TypeScript
+- **UI 组件库:** Tailwind CSS + Shadcn/ui
+- **状态管理:** React Hooks + Context API / Zustand
+- **HTTP 客户端:** Axios / Fetch API
+- **后端 API:** Next.js API Routes
+- **爬虫库:** Axios + Cheerio
+- **数据库:** MySQL 8.0
+- **ORM:** Prisma / Sequelize
+- **部署:** Vercel / 自托管 Node.js 服务器
 
+#### **3.1.1. 前端架构设计 (React/Next.js)**
 
+**组件层级结构:**
+```
+- app/layout.tsx (应用根布局，处理全局样式和主题)
+  - app/page.tsx (主页，用户进入后的仪表盘)
+    - components/BentoGrid.tsx (Bento 网格布局容器)
+      - components/WordlistsCard.tsx (我的词书卡片)
+        - components/UploadWordlistModal.tsx (上传词书弹窗)
+        - components/WordlistItem.tsx (可复用组件，展示单个词书)
+      - components/ReviewCenterCard.tsx (复习中心卡片)
+    - app/learning/page.tsx (专注学习模式页)
+      - components/WordDisplay.tsx (负责在屏幕随机位置显示单个单词)
+      - components/WordDefinitionPanel.tsx (单词释义浮动面板，默认隐藏)
+      - components/ControlBar.tsx (固定在角落的控制条)
+    - app/test/page.tsx (全览测试模式页)
+      - components/WordGrid.tsx (负责渲染所有单词卡片的网格)
+        - components/WordCard.tsx (单个单词卡片，可翻转)
+    - app/token/page.tsx (令牌输入/验证页)
+      - components/TokenInputForm.tsx
+```
 
+**状态管理结构:**
+```typescript
+// types/user.ts
+export interface UserState {
+  token: string | null;
+  isAuthenticated: boolean;
+  status: 'idle' | 'loading' | 'authenticated' | 'error';
+}
+
+// types/wordlist.ts
+export interface Wordlist {
+  id: number;
+  name: string;
+  wordCount: number;
+  createdAt: string;
+}
+
+// types/learning.ts
+export interface LearningState {
+  sessionType: 'new' | 'review' | 'test' | null;
+  wordQueue: string[];
+  currentWordText: string | null;
+  currentWordData: any | null;
+  status: 'idle' | 'active' | 'finished';
+}
+
+// types/settings.ts
+export interface SettingsState {
+  fontSize: number;
+  panelWidth: number;
+  autoPlayAudio: boolean;
+  loopAudio: boolean;
+  instantConsolidation: boolean;
+}
+```
+
+**核心组件接口定义:**
+```typescript
+// components/WordlistItem.tsx
+interface WordlistItemProps {
+  wordlist: Wordlist;
+  onStartLearning: (wordlistId: number) => void;
+  onStartTest: (wordlistId: number) => void;
+  onDelete: (wordlistId: number) => void;
+}
+
+// components/WordCard.tsx
+interface WordCardProps {
+  wordText: string;
+  wordDefinition: any | null;
+  isFlipped?: boolean;
+  onFlip?: () => void;
+}
+
+// components/SettingsPanel.tsx
+interface SettingsPanelProps {
+  isOpen: boolean;
+  config: SettingsState;
+  onConfigChange: (newConfig: SettingsState) => void;
+  onClose: () => void;
+  isLearningMode?: boolean;
+}
+```
+
+**前端目录结构:**
+```
+/src
+  /app              # Next.js App Router
+    /api             # API 路由
+      /dictionary    # 词典 API
+    /learning        # 学习模式页面
+    /test            # 测试模式页面
+    /token           # 令牌验证页面
+    layout.tsx       # 根布局
+    page.tsx         # 主页
+  /components       # React 组件
+    /ui             # 基础 UI 组件 (shadcn/ui)
+    /wordlist       # 词书相关组件
+    /learning       # 学习/测试模式相关组件
+  /lib              # 工具库
+    /utils.ts       # 通用工具函数
+    /dictionary.ts   # 词典相关功能
+  /types            # TypeScript 类型定义
+    /index.ts       # 导出所有类型
+  /hooks            # 自定义 React Hooks
+    - useDictionary.ts
+    - useWordlist.ts
+    - useSettings.ts
+```
 
 #### **3.2. 性能要求**
 
 - **API 响应:** 单个单词释义的 API（无论是否命中缓存）响应时间应在 500ms 以内。
-
-- **交互流畅性:** 点击“随机打乱”按钮，页面单词位置重排应在 100ms 内完成，视觉上无卡顿。
+- **页面加载:** Next.js 静态生成页面应在 2 秒内完成首次内容绘制 (FCP)。
+- **交互流畅性:** 点击"随机打乱"按钮，页面单词位置重排应在 100ms 内完成，视觉上无卡顿。
 
 #### **3.3. 平台兼容性**
 
@@ -164,8 +285,13 @@
 - **二级支持平台 (Tier 2):**
   - **iPad:** 最新版的 Safari 浏览器。所有 UI 元素和交互必须对触控操作友好、响应灵敏。
 
+#### **3.4. 开发与部署**
 
-
+- **开发环境:** Node.js 18+，npm 或 yarn，VS Code
+- **代码规范:** ESLint + Prettier，TypeScript 严格模式
+- **测试框架:** Jest + React Testing Library
+- **部署方式:** Vercel (推荐) 或自托管 Node.js 服务器
+- **CI/CD:** GitHub Actions 自动化测试和部署
 
 ### **PRD 模块 6: 详细技术规格 - 词典内容获取**
 
@@ -310,93 +436,81 @@
 
 ---
 
-#### **6.4. HTML 解析逻辑与 CSS 选择器**
+#### **6.4. HTML 解析逻辑与 CSS 选择器 (Node.js + Cheerio 实现)**
 
-以下是针对上述JSON结构中每个字段的精确解析规则。所有选择器均相对于根节点 `<div class="lf_area">`。
+以下是针对当前实现的精确解析规则，基于 Bing 词典移动版页面的结构。
 
-**1. `word` (单词本身)**
-*   **Selector:** `div.qdef > div.hd_area > div.hd_div#headword > h1 > strong`
-*   **Action:** 获取其 `textContent`。
+**1. 基本释义提取**
+*   **容器选择器:** `#client_def_container:first .client_def_bar`
+*   **词性选择器:** `.client_def_title_bar .client_def_title`
+*   **释义选择器:** `.client_def_list_word_bar`
+*   **网络释义识别:** 检查 `.client_def_title_web` 元素是否存在且文本为"网络"
 
-**2. `pronunciation` (发音)**
-*   **`us_phonetic`:**
-    *   **Selector:** `div.hd_p1_1 > div.hd_prUS`
-    *   **Action:** 获取 `textContent`，并去除"美 "前缀。
-*   **`us_audio_url`:**
-    *   **Selector:** `a#bigaud_us`
-    *   **Action:** 获取 `data-mp3link` 属性值。
-*   **`uk_phonetic`:**
-    *   **Selector:** `div.hd_p1_1 > div.hd_pr`
-    *   **Action:** 获取 `textContent`，并去除"英 "前缀。
-*   **`uk_audio_url`:**
-    *   **Selector:** `a#bigaud_uk`
-    *   **Action:** 获取 `data-mp3link` 属性值。
+**2. 词形变换提取**
+*   **容器选择器:** `#client_word_change_def .client_word_change_word`
+*   **词形类型:** 获取 `title` 属性
+*   **变换后单词:** 获取 `textContent`
 
-**3. `quick_definitions` (快速释义)**
-*   **Logic:** 遍历 `div.qdef > ul > li` 列表中的每个 `<li>` 元素。
-*   **Condition:** **跳过** 包含 `<span class="pos web">` 的 `<li>` 元素。
-*   **For each valid `<li>`:**
-    *   **`pos`:**
-        *   **Selector:** `span.pos`
-        *   **Action:** 获取 `textContent`。
-    *   **`definition`:**
-        *   **Selector:** `span.def`
-        *   **Action:** 获取 `textContent`。
+**3. 权威英汉释义提取**
+*   **容器选择器:** `#clientnlid`
+*   **词性区块:** `.defeachseg`
+*   **词性选择器:** `.defeachhead .defpos`
+*   **释义条目:** `.deflistitem`
+*   **释义编号:** `.defnum`
+*   **中文释义:** `.defitemcon .itemname`
+*   **英文释义:** `.defitemcon .itmeval`
+*   **例句列表:** `.exambar .examlistitem`
 
-**4. `web_definition` (网络释义)**
-*   **Logic:**
-    1.  定位到 `div.qdef > ul > li` 列表中 **唯一一个** 包含 `<span class="pos web">` 的 `<li>` 元素。
-    2.  获取其兄弟元素 `<span class="def b_regtxt">` 的 `textContent`。
-    3.  对获取到的字符串按中文分号 `；` 进行分割，得到一个字符串数组。
-*   **Selector:** `div.qdef > ul > li:has(span.pos.web) > span.def`
-*   **Action:** `textContent.split('；')`
+**4. 英汉释义提取**
+*   **容器选择器:** `#clientcrossid`
+*   **词性区块:** `.client_def_bar`
+*   **词性选择器:** `.client_def_title_bar .client_def_title`
+*   **释义条目:** `.client_def_list_item`
+*   **释义编号:** `.client_def_list_word_num`
+*   **释义内容:** `.client_def_list_word_bar`
 
-**5. `authoritative_eng_chi` (权威英汉双解):**
-    *   **Outer Loop Selector:** `#authid > div.li_sen > div.each_seg`
-    *   **For each `each_seg`:**
-        *   **`pos`:** `div.pos_lin > div.pos` -> `textContent`.
-        *   **Inner Loop Selector:** `div.de_seg > div.se_lis` (遍历所有释义条目)
-        *   **For each `se_lis`:**
-            *   **`eng`:** `span.val` -> `textContent`.
-            *   **`chi`:** `span.bil` -> `textContent`.
-            *   **`grammar_tag` :**
-                *   `div.sen_com > span.comple` -> `textContent` (例如 `~ to do sth`).
-                *   `div.au_def > span.gra` -> 合并所有 `textContent` (例如 `[sing], [u]`).
-**6. `eng_chi` (英汉):**
-    *   **Outer Loop Selector:** `#crossid > tbody > tr.def_row`
-    *   **For each `tr`:**
-        *   **`pos`:** `td > div.pos` -> `textContent`.
-        *   **`definitions`:**
-            *   **Logic:** 遍历 `td > div.def_fl > div.de_li1`
-            *   **Selector:** `span.p1-1` -> `textContent`，将所有结果收集为一个数组。
-**7. `eng_eng` (英英):**
-    *   **Logic:** 与 `eng_chi` 类似。
-    *   **Outer Loop Selector:** `#homoid > tbody > tr.def_row`
-    *   **For each `tr`:**
-        *   **`pos`:** `td > div.pos` -> `textContent`.
-        *   **`definitions`:** `td > div.def_fl > div.de_li1 > div.df_cr_w` -> `textContent`，收集为数组。
+**5. 英英释义提取**
+*   **容器选择器:** `#clienthomoid`
+*   **词性区块:** `.client_def_bar`
+*   **词性选择器:** `.client_def_title_bar .client_def_title`
+*   **释义条目:** `.client_def_list_item`
+*   **链接单词选择器:** `.client_def_list_word_en`
 
-**8. `example_sentences` (例句)**
-*   **Outer Loop Selector:** `#sentenceSeg > div.se_li` (**注意:** 只获取前10条)
-*   **For each `se_li` (up to 10):**
-    *   **`english`:**
-        *   **Selector:** `div.sen_en`
-        *   **Action:** 获取 `textContent`。
-    *   **`chinese`:**
-        *   **Selector:** `div.sen_cn`
-        *   **Action:** 获取 `textContent`。
+**6. 音标和音频数据提取**
+*   **发音列表容器:** `.client_def_hd_pn_list`
+*   **音标文本:** `.client_def_hd_pn`
+*   **音频 URL:** `.client_aud_o` 的 `data-pronunciation` 属性
+*   **美式发音识别:** 文本包含"美:"
+*   **英式发音识别:** 文本包含"英:"
+
+**7. 例句数据提取**
+*   **例句列表容器:** `.client_sentence_list`
+*   **例句编号:** `.client_sentence_list_num`
+*   **英文例句:** `.client_sen_en`
+*   **中文例句:** `.client_sen_cn`
+*   **音频 URL:** `.client_bdsen_audio` 的 `data-mp3link` 属性
+*   **来源链接:** `.client_sen_link`
+*   **高亮单词:** `.client_sentence_search, .client_sen_en_word, .client_sen_cn_word`
+
+**8. 错误处理和容错机制**
+*   **多重选择器策略:** 为每个数据字段提供多个备选选择器
+*   **空值检查:** 所有提取操作都进行空值验证
+*   **异常捕获:** 每个提取函数都包含 try-catch 块
+*   **日志记录:** 详细记录提取过程中的错误和警告
 
 ---
 
 #### **6.5. API 规范**
 
-**Endpoint:** `GET /api/v1/word/{word_text}`
+**Endpoint:** `GET /api/dictionary`
 
 **描述:**
 获取指定单词的详细词典信息。此API会首先检查数据库缓存。如果命中缓存，则直接返回数据库中的JSON数据。如果未命中，则触发实时爬虫任务，获取数据，存入数据库，然后返回给客户端。
 
-**路径参数:**
-*   `word_text` (string, required): 需要查询的英文单词。
+**查询参数:**
+*   `word` (string, required): 需要查询的英文单词。
+*   `type` (string, optional): 释义类型，可选值: 'all', 'authoritative', 'bilingual', 'english'，默认为 'all'。
+*   `test` (boolean, optional): 测试模式，设置为 'true' 时分析网站结构而非提取单词数据。
 
 **认证:**
 *   需要通过请求头传递有效的用户令牌 (Token)。
@@ -404,7 +518,44 @@
 **响应:**
 *   **`200 OK` (成功):**
     *   **Content-Type:** `application/json`
-    *   **Body:** 完全符合 **6.3. 数据结构** 定义的JSON对象。
+    *   **Body:** 包含单词释义的JSON对象，格式如下：
+        ```json
+        {
+          "success": true,
+          "word": "example",
+          "requestedType": "all",
+          "data": {
+            "pronunciation": "发音信息",
+            "pronunciationData": {
+              "american": {
+                "phonetic": "[ɪɡˈzæmpəl]",
+                "audioUrl": "音频URL"
+              },
+              "british": {
+                "phonetic": "[ɪɡˈzɑːmpəl]",
+                "audioUrl": "音频URL"
+              }
+            },
+            "definitions": {
+              "basic": [
+                {
+                  "partOfSpeech": "n.",
+                  "meaning": "例子，范例"
+                }
+              ],
+              "web": [
+                {
+                  "meaning": "网络释义"
+                }
+              ]
+            },
+            "authoritativeDefinitions": [],
+            "bilingualDefinitions": [],
+            "englishDefinitions": [],
+            "sentences": []
+          }
+        }
+        ```
 
 *   **`404 Not Found` (单词不存在):**
     *   **场景:** 在Bing词典上无法找到该单词的页面。
@@ -412,6 +563,7 @@
     *   **Body:**
         ```json
         {
+          "success": false,
           "error": "Word not found",
           "message": "The word '{word_text}' could not be found in the dictionary."
         }
@@ -423,6 +575,7 @@
     *   **Body:**
         ```json
         {
+          "success": false,
           "error": "Failed to fetch word data",
           "message": "An unexpected error occurred while fetching data from the dictionary source."
         }
@@ -434,10 +587,75 @@
 
 **字段:**
 *   `id` (INT, Primary Key, Auto Increment)
-*   `word_text` (VARCHAR, UNIQUE): 单词的文本形式，例如 "need"。
-*   `definition_data` (JSON): 用于存储从爬虫获取并格式化后的完整JSON对象。使用JSON类型可以提供灵活的查询能力并避免复杂的表结构。
-*   `created_at` (TIMESTAMP): 记录创建时间。
-*   `updated_at` (TIMESTAMP): 记录最后更新时间（用于未来可能的重新爬取策略）。
+*   `word_text` (VARCHAR(100), UNIQUE): 单词的文本形式，例如 "need"。
+*   `definition_data` (JSON): 用于存储从爬虫获取并格式化后的完整JSON对象。MySQL 8.0 原生支持JSON类型，可以提供灵活的查询能力并避免复杂的表结构。
+*   `created_at` (TIMESTAMP, DEFAULT CURRENT_TIMESTAMP): 记录创建时间。
+*   `updated_at` (TIMESTAMP, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP): 记录最后更新时间（用于未来可能的重新爬取策略）。
+
+**MySQL 8.0 特定优化:**
+*   使用 MySQL 8.0 的原生 JSON 类型，支持高效的 JSON 查询和索引
+*   可以在 `word_text` 字段上创建 B-tree 索引以提高查询性能
+*   可以在 `definition_data` 中的特定 JSON 路径上创建生成列和索引
+
+#### **6.7. 爬虫实现细节 (Node.js + Cheerio)**
+
+**技术栈:**
+*   **HTTP 客户端:** Axios (支持请求拦截、超时控制、错误处理)
+*   **HTML 解析:** Cheerio (服务器端的 jQuery 实现，轻量且高效)
+*   **目标 URL:** `https://cn.bing.com/dict/clientsearch?mkt=zh-CN&setLang=zh&form=BDVEHC&ClientVer=BDDTV3.5.1.4320&q={word}`
+
+**爬虫流程:**
+1. **请求配置:**
+   ```javascript
+   const headers = {
+     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+     'Accept-Encoding': 'gzip, deflate, br',
+     'Connection': 'keep-alive'
+   };
+   ```
+
+2. **数据提取策略:**
+   - 使用 Cheerio 加载返回的 HTML
+   - 采用 CSS 选择器而非 XPath 进行元素定位
+   - 实现多重选择器策略以提高容错性
+
+3. **核心数据结构 (TypeScript 接口):**
+   ```typescript
+   interface PronunciationData {
+     american?: {
+       phonetic: string;
+       audioUrl: string;
+     };
+     british?: {
+       phonetic: string;
+       audioUrl: string;
+     };
+   }
+   
+   interface AuthoritativeDefinition {
+     partOfSpeech: string;
+     definitions: Array<{
+       number: number;
+       chineseMeaning: string;
+       englishMeaning: string;
+     }>;
+   }
+   
+   // 其他接口定义...
+   ```
+
+4. **错误处理机制:**
+   - 网络超时处理 (10秒超时)
+   - 连接失败重试机制
+   - 结构化错误日志记录
+   - 优雅降级：部分数据提取失败时不影响整体流程
+
+5. **性能优化:**
+   - 请求结果缓存 (避免重复爬取)
+   - 并发控制 (限制同时进行的爬虫请求数)
+   - 增量更新 (只更新变化的数据)
 
 ### **4. 版本规划与未来展望**
 

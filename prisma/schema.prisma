@@ -1,0 +1,91 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// 用户表：存储用户的核心标识
+model User {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique @db.VarChar(64)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // 关联关系
+  wordlists         Wordlist[]
+  userWordProgress  UserWordProgress[]
+
+  @@map("Users")
+}
+
+// 词书表：存储用户上传的词书信息
+model Wordlist {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  name      String   @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // 关联关系
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wordlistEntries WordlistEntry[]
+
+  @@map("Wordlists")
+}
+
+// 单词表：全局单词缓存表
+model Word {
+  id              Int      @id @default(autoincrement())
+  wordText        String   @unique @map("word_text") @db.VarChar(100)
+  definitionData  Json     @map("definition_data")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // 关联关系
+  wordlistEntries   WordlistEntry[]
+  userWordProgress  UserWordProgress[]
+
+  @@map("Words")
+}
+
+// 词书条目表：词书和单词的多对多关联
+model WordlistEntry {
+  id         Int @id @default(autoincrement())
+  wordlistId Int @map("wordlist_id")
+  wordId     Int @map("word_id")
+
+  // 关联关系
+  wordlist Wordlist @relation(fields: [wordlistId], references: [id], onDelete: Cascade)
+  word     Word     @relation(fields: [wordId], references: [id], onDelete: Cascade)
+
+  @@unique([wordlistId, wordId])
+  @@map("WordlistEntries")
+}
+
+// 用户单词进度表：跟踪每个用户对每个单词的学习进度
+model UserWordProgress {
+  id              Int      @id @default(autoincrement())
+  userId          Int      @map("user_id")
+  wordId          Int      @map("word_id")
+  reviewStage     Int      @default(0) @map("review_stage")
+  nextReviewDate  DateTime @map("next_review_date") @db.Date
+  lastReviewedAt  DateTime? @map("last_reviewed_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // 关联关系
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  word Word @relation(fields: [wordId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, wordId])
+  @@map("UserWordProgress")
+}
