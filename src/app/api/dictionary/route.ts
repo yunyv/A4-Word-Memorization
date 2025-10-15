@@ -2,6 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dictionaryScraper } from '@/lib/dictionary';
 import { db } from '@/lib/db';
 
+/**
+ * 将复杂对象转换为 Prisma 可接受的 JsonValue 类型
+ * 通过 JSON 序列化和反序列化来确保对象结构符合 Prisma 的 Json 字段要求
+ */
+function convertToPrismaJson(data: any): any {
+  if (data === null || data === undefined) {
+    return data;
+  }
+  
+  try {
+    // 将对象转换为 JSON 字符串，然后再解析回来
+    // 这样可以确保对象结构符合 Prisma 的 Json 字段要求
+    return JSON.parse(JSON.stringify(data));
+  } catch (error) {
+    console.error('转换对象为 Prisma JSON 时出错:', error);
+    return null;
+  }
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const word = searchParams.get('word');
@@ -66,12 +85,12 @@ export async function GET(request: NextRequest) {
           await db.word.upsert({
             where: { wordText: word!.toLowerCase() },
             update: {
-              definitionData: result.data,
+              definitionData: convertToPrismaJson(result.data),
               updatedAt: new Date()
             },
             create: {
               wordText: word!.toLowerCase(),
-              definitionData: result.data
+              definitionData: convertToPrismaJson(result.data)
             }
           });
           console.log(`单词 ${word} 已缓存到数据库`);

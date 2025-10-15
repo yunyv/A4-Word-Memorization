@@ -49,7 +49,7 @@ export class ErrorBoundary extends Component<Props, State> {
       
       // 默认错误UI
       return (
-        <div className="min-h-screen flex items-center justify-center bg-sand-50" style={{ backgroundColor: '#F8F5F1' }}>
+        <div className="min-h-screen flex items-center justify-center bg-sand-50">
           <Card className="w-full max-w-md shadow-lg">
             <CardHeader className="text-center">
               <div className="flex justify-center mb-4">

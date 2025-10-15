@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useLearning } from '@/hooks/useLearning';
@@ -17,9 +17,15 @@ export function ReviewCenterCard({ wordlistId, onStartReview, onStartTest }: Lea
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { getLearningProgressStats } = useLearning();
+  const isInitialized = useRef(false);
 
   // 获取学习进度统计
   useEffect(() => {
+    // 避免在组件首次挂载时重复执行
+    if (isInitialized.current && wordlistId === undefined) {
+      return;
+    }
+    
     const fetchStats = async () => {
       setIsLoading(true);
       setError(null);
@@ -38,6 +44,7 @@ export function ReviewCenterCard({ wordlistId, onStartReview, onStartTest }: Lea
     };
 
     fetchStats();
+    isInitialized.current = true;
   }, [wordlistId, getLearningProgressStats]);
 
   // 格式化日期
@@ -185,7 +192,7 @@ export function ReviewCenterCard({ wordlistId, onStartReview, onStartTest }: Lea
                     <div className="w-32 bg-gray-200 rounded-full h-2 mr-2">
                       <div 
                         className="bg-blue-600 h-2 rounded-full" 
-                        style={{ width: `${(count / stats.totalWords) * 100}%` }}
+                        style={{ width: `${(count / stats.totalWords) * 100}%` }} // 保留这个动态样式，因为它依赖于数据计算
                       ></div>
                     </div>
                     <span className="text-sm text-gray-900 w-8 text-right">{count}</span>

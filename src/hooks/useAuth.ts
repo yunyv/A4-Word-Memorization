@@ -135,22 +135,35 @@ export function useAuth() {
 }
 
 // 获取认证头的辅助函数
-export function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem('auth-token');
-  if (token) {
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    };
+export function getAuthHeaders(options: RequestInit = {}): Record<string, string> {
+  // 确保在客户端环境中运行
+  if (typeof window === 'undefined') {
+    // 服务器端，只设置基本headers
+    const headers: Record<string, string> = {};
+    if (!(options.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+    }
+    return headers;
   }
-  return {
-    'Content-Type': 'application/json'
-  };
+  
+  const token = localStorage.getItem('auth-token');
+  const headers: Record<string, string> = {};
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  // 如果body是FormData，不要设置Content-Type，让浏览器自动设置
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
+  
+  return headers;
 }
 
 // 带认证的fetch请求辅助函数
 export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const authHeaders = getAuthHeaders();
+  const authHeaders = getAuthHeaders(options);
   
   const defaultOptions: RequestInit = {
     headers: {
@@ -163,7 +176,7 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
   const response = await fetch(url, defaultOptions);
   
   // 如果返回401，说明认证失效，清除本地存储
-  if (response.status === 401) {
+  if (response.status === 401 && typeof window !== 'undefined') {
     localStorage.removeItem('auth-token');
     window.location.href = '/token';
   }

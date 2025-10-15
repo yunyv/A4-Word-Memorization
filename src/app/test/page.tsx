@@ -181,7 +181,7 @@ export default function TestPage() {
   // 如果正在加载或未认证，显示加载状态
   if (userState.status === 'loading' || !userState.isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-sand-50" style={{ backgroundColor: '#F8F5F1' }}>
+      <div className="min-h-screen flex items-center justify-center bg-sand-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">正在加载...</p>
@@ -193,7 +193,7 @@ export default function TestPage() {
   // 如果正在加载测试数据
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-sand-50" style={{ backgroundColor: '#F8F5F1' }}>
+      <div className="min-h-screen flex items-center justify-center bg-sand-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">正在准备测试...</p>
@@ -205,7 +205,7 @@ export default function TestPage() {
   // 如果有错误
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-sand-50" style={{ backgroundColor: '#F8F5F1' }}>
+      <div className="min-h-screen flex items-center justify-center bg-sand-50">
         <Card className="w-full max-w-md shadow-lg">
           <CardContent className="p-8 text-center">
             <h2 className="text-2xl font-bold text-red-600 mb-4">出错了</h2>
@@ -227,7 +227,7 @@ export default function TestPage() {
     const stats = calculateStats();
     
     return (
-      <div className="min-h-screen bg-sand-50 flex flex-col" style={{ backgroundColor: '#F8F5F1' }}>
+      <div className="min-h-screen bg-sand-50 flex flex-col">
         {/* 顶部导航栏 */}
         <header className="bg-white shadow-sm border-b">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -305,7 +305,7 @@ export default function TestPage() {
   // 如果没有测试单词
   if (testWords.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-sand-50" style={{ backgroundColor: '#F8F5F1' }}>
+      <div className="min-h-screen flex items-center justify-center bg-sand-50">
         <Card className="w-full max-w-md shadow-lg">
           <CardContent className="p-8 text-center">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">没有可测试的单词</h2>
@@ -328,7 +328,7 @@ export default function TestPage() {
   const currentDefinition = currentWord?.definition_data;
 
   return (
-    <div className="min-h-screen bg-sand-50 flex flex-col" style={{ backgroundColor: '#F8F5F1' }}>
+    <div className="min-h-screen bg-sand-50 flex flex-col">
       {/* 顶部导航栏 */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

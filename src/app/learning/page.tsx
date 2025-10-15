@@ -112,7 +112,7 @@ export default function LearningPage() {
   // 如果正在加载或未认证，显示加载状态
   if (userState.status === 'loading' || !userState.isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-sand-50" style={{ backgroundColor: '#F8F5F1' }}>
+      <div className="min-h-screen flex items-center justify-center bg-sand-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">正在加载...</p>
@@ -124,7 +124,7 @@ export default function LearningPage() {
   // 如果会话未开始或已结束
   if (learningState.status === 'idle' || learningState.status === 'finished') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-sand-50" style={{ backgroundColor: '#F8F5F1' }}>
+      <div className="min-h-screen flex items-center justify-center bg-sand-50">
         <Card className="w-full max-w-md shadow-lg">
           <CardContent className="p-8 text-center">
             {learningState.status === 'finished' ? (
@@ -157,7 +157,7 @@ export default function LearningPage() {
   // 如果有错误
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-sand-50" style={{ backgroundColor: '#F8F5F1' }}>
+      <div className="min-h-screen flex items-center justify-center bg-sand-50">
         <Card className="w-full max-w-md shadow-lg">
           <CardContent className="p-8 text-center">
             <h2 className="text-2xl font-bold text-red-600 mb-4">出错了</h2>
@@ -175,7 +175,7 @@ export default function LearningPage() {
   }
 
   return (
-    <div className="min-h-screen bg-sand-50 flex flex-col" style={{ backgroundColor: '#F8F5F1' }}>
+    <div className="min-h-screen bg-sand-50 flex flex-col">
       {/* 顶部导航栏 */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -232,7 +232,7 @@ export default function LearningPage() {
         
         {/* 反馈覆盖层 */}
         {showFeedback && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className={`p-8 rounded-lg ${isCorrect ? 'bg-green-500' : 'bg-red-500'} text-white`}>
               <div className="flex flex-col items-center">
                 {isCorrect ? (

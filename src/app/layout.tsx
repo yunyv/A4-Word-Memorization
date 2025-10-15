@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { NoSSR } from "@/components/NoSSR";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,14 +29,13 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        style={{
-          fontFamily: 'Inter, "Source Han Sans CN", sans-serif',
-        }}
       >
         <ErrorBoundary>
-          <AuthProvider>
-            {children}
-          </AuthProvider>
+          <NoSSR>
+            <AuthProvider>
+              {children}
+            </AuthProvider>
+          </NoSSR>
         </ErrorBoundary>
       </body>
     </html>

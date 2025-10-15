@@ -82,7 +82,7 @@ export function WordDisplay({
       <div 
         className="cursor-pointer select-none transition-all duration-300 hover:scale-105"
         onClick={handleClick}
-        style={{ fontSize: `${fontSize}px` }}
+        style={{ fontSize: `${fontSize}px` }} // 保留这个动态样式，因为它依赖于用户设置
       >
         <h1 className="font-bold text-gray-900 text-center mb-4">
           {wordText}

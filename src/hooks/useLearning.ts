@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DueWordsResponse, ReviewProgressResponse, LearningState } from '@/types/learning';
 import { authFetch } from './useAuth';
 import { EBBINGHAUS_INTERVAL_MAP } from '@/types/learning';
+import { cachedFetch, generateCacheKey } from '@/lib/cacheUtils';
 
 export function useLearning() {
   const [learningState, setLearningState] = useState<LearningState>({
@@ -18,18 +19,23 @@ export function useLearning() {
   const [error, setError] = useState<string | null>(null);
 
   // 获取待复习的单词
-  const fetchDueWords = async (wordlistId?: number, limit: number = 50): Promise<DueWordsResponse | null> => {
+  const fetchDueWords = useCallback(async (wordlistId?: number, limit: number = 50): Promise<DueWordsResponse | null> => {
     setIsLoading(true);
     setError(null);
 
     try {
-      let url = '/api/review/due?limit=' + limit;
-      if (wordlistId) {
-        url += '&wordlistId=' + wordlistId;
-      }
+      const cacheKey = generateCacheKey('dueWords', { wordlistId, limit });
+      
+      const data = await cachedFetch(cacheKey, async () => {
+        let url = '/api/review/due?limit=' + limit;
+        if (wordlistId) {
+          url += '&wordlistId=' + wordlistId;
+        }
 
-      const response = await authFetch(url);
-      const data: DueWordsResponse = await response.json();
+        const response = await authFetch(url);
+        const result: DueWordsResponse = await response.json();
+        return result;
+      }, 2 * 60 * 1000); // 2分钟缓存
 
       if (data.success) {
         return data;
@@ -44,10 +50,10 @@ export function useLearning() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   // 开始学习会话
-  const startLearningSession = async (
+  const startLearningSession = useCallback(async (
     sessionType: 'new' | 'review' | 'test',
     wordlistId?: number,
     limit: number = 50
@@ -131,10 +137,10 @@ export function useLearning() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [fetchDueWords]);
 
   // 加载当前单词数据
-  const loadCurrentWord = async (): Promise<void> => {
+  const loadCurrentWord = useCallback(async (): Promise<void> => {
     if (!learningState.currentWordText) return;
 
     setIsLoading(true);
@@ -158,7 +164,7 @@ export function useLearning() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [learningState.currentWordText]);
 
   // 进入下一个单词
   const nextWord = (): boolean => {
@@ -185,7 +191,7 @@ export function useLearning() {
   };
 
   // 更新单词复习进度
-  const updateWordProgress = async (wordId: number, isCorrect: boolean = true): Promise<ReviewProgressResponse | null> => {
+  const updateWordProgress = useCallback(async (wordId: number, isCorrect: boolean = true): Promise<ReviewProgressResponse | null> => {
     setIsLoading(true);
     setError(null);
 
@@ -210,7 +216,7 @@ export function useLearning() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   // 结束学习会话
   const endLearningSession = (): void => {
@@ -225,17 +231,22 @@ export function useLearning() {
   };
 
   // 获取学习进度统计
-  const getLearningProgressStats = async (wordlistId?: number) => {
+  const getLearningProgressStats = useCallback(async (wordlistId?: number) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await authFetch('/api/review/due', {
-        method: 'POST',
-        body: JSON.stringify({ wordlistId })
-      });
+      const cacheKey = generateCacheKey('learningProgressStats', { wordlistId });
+      
+      const data = await cachedFetch(cacheKey, async () => {
+        const response = await authFetch('/api/review/due', {
+          method: 'POST',
+          body: JSON.stringify({ wordlistId })
+        });
 
-      const data = await response.json();
+        const result = await response.json();
+        return result;
+      }, 3 * 60 * 1000); // 3分钟缓存
 
       if (data.success) {
         return data.stats;
@@ -250,7 +261,7 @@ export function useLearning() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   // 当当前单词文本变化时，加载单词数据
   useEffect(() => {

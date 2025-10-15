@@ -149,7 +149,7 @@ export default function SettingsPage() {
   // 如果正在加载或未认证，显示加载状态
   if (userState.status === 'loading' || !userState.isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-sand-50" style={{ backgroundColor: '#F8F5F1' }}>
+      <div className="min-h-screen flex items-center justify-center bg-sand-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">正在加载...</p>
@@ -159,7 +159,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-sand-50" style={{ backgroundColor: '#F8F5F1' }}>
+    <div className="min-h-screen bg-sand-50">
       {/* 顶部导航栏 */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -308,7 +308,7 @@ export default function SettingsPage() {
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div 
                           className="bg-blue-600 h-2 rounded-full" 
-                          style={{ width: `${cacheStatus.cachePercentage}%` }}
+                          style={{ width: `${cacheStatus.cachePercentage}%` }} // 保留这个动态样式，因为它依赖于数据计算
                         ></div>
                       </div>
                       <p className="text-xs text-gray-500 mt-1">

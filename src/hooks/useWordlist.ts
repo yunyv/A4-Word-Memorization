@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Wordlist, WordlistWithCount, UploadWordlistResponse, DeleteWordlistResponse } from '@/types/wordlist';
 import { authFetch } from './useAuth';
+import { cachedFetch, generateCacheKey } from '@/lib/cacheUtils';
 
 export function useWordlists() {
   const [wordlists, setWordlists] = useState<WordlistWithCount[]>([]);
@@ -10,13 +11,16 @@ export function useWordlists() {
   const [error, setError] = useState<string | null>(null);
 
   // 获取词书列表
-  const fetchWordlists = async () => {
+  const fetchWordlists = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await authFetch('/api/wordlists');
-      const data = await response.json();
+      const data = await cachedFetch('wordlists', async () => {
+        const response = await authFetch('/api/wordlists');
+        const result = await response.json();
+        return result;
+      }, 5 * 60 * 1000); // 5分钟缓存
 
       if (data.success) {
         setWordlists(data.wordlists || []);
@@ -29,10 +33,10 @@ export function useWordlists() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   // 上传新词书
-  const uploadWordlist = async (name: string, file: File): Promise<UploadWordlistResponse> => {
+  const uploadWordlist = useCallback(async (name: string, file: File): Promise<UploadWordlistResponse> => {
     setIsLoading(true);
     setError(null);
 
@@ -50,6 +54,10 @@ export function useWordlists() {
       const data: UploadWordlistResponse = await response.json();
 
       if (data.success) {
+        // 清除词书列表缓存
+        const { memoryCache } = await import('@/lib/cacheUtils');
+        memoryCache.delete('wordlists');
+        
         // 刷新词书列表
         await fetchWordlists();
       } else {
@@ -68,10 +76,10 @@ export function useWordlists() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [fetchWordlists]);
 
   // 删除词书
-  const deleteWordlist = async (id: number): Promise<DeleteWordlistResponse> => {
+  const deleteWordlist = useCallback(async (id: number): Promise<DeleteWordlistResponse> => {
     setIsLoading(true);
     setError(null);
 
@@ -83,6 +91,10 @@ export function useWordlists() {
       const data: DeleteWordlistResponse = await response.json();
 
       if (data.success) {
+        // 清除词书列表缓存
+        const { memoryCache } = await import('@/lib/cacheUtils');
+        memoryCache.delete('wordlists');
+        
         // 从本地状态中移除已删除的词书
         setWordlists(prev => prev.filter(wordlist => wordlist.id !== id));
       } else {
@@ -101,16 +113,20 @@ export function useWordlists() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   // 获取词书详情
-  const getWordlistDetails = async (id: number) => {
+  const getWordlistDetails = useCallback(async (id: number) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await authFetch(`/api/wordlists/${id}`);
-      const data = await response.json();
+      const cacheKey = generateCacheKey('wordlistDetails', { id });
+      const data = await cachedFetch(cacheKey, async () => {
+        const response = await authFetch(`/api/wordlists/${id}`);
+        const result = await response.json();
+        return result;
+      }, 5 * 60 * 1000); // 5分钟缓存
 
       if (data.success) {
         return data.wordlist;
@@ -125,7 +141,7 @@ export function useWordlists() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   // 初始化时获取词书列表
   useEffect(() => {

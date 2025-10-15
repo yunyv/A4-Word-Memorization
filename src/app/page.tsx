@@ -20,7 +20,7 @@ export default function HomePage() {
 
   // 显示加载状态
   return (
-    <div className="min-h-screen flex items-center justify-center bg-sand-50" style={{ backgroundColor: '#F8F5F1' }}>
+    <div className="min-h-screen flex items-center justify-center bg-sand-50">
       <div className="text-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
         <p className="text-gray-600">正在加载...</p>

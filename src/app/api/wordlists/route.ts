@@ -42,7 +42,10 @@ export async function GET(request: NextRequest) {
       name: wordlist.name,
       wordCount: wordlist._count.wordlistEntries,
       createdAt: wordlist.createdAt.toISOString(),
-      userId: wordlist.userId
+      userId: wordlist.userId,
+      _count: {
+        wordlistEntries: wordlist._count.wordlistEntries
+      }
     }));
 
     return NextResponse.json({

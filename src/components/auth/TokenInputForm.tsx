@@ -31,7 +31,7 @@ export function TokenInputForm() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-sand-50" style={{ backgroundColor: '#F8F5F1' }}>
+    <div className="min-h-screen flex items-center justify-center bg-sand-50">
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="text-center space-y-4">
           <CardTitle className="text-3xl font-bold text-gray-900">
@@ -52,7 +52,6 @@ export function TokenInputForm() {
                 onChange={handleInputChange}
                 disabled={isLoading || isSubmitting}
                 className="text-center text-lg h-12"
-                style={{ fontSize: '16px' }}
               />
             </div>
             
@@ -66,7 +65,6 @@ export function TokenInputForm() {
               type="submit"
               disabled={!token.trim() || isLoading || isSubmitting}
               className="w-full h-12 text-base font-semibold"
-              style={{ backgroundColor: '#4A69E2' }}
             >
               {isLoading || isSubmitting ? '验证中...' : '开始使用'}
             </Button>

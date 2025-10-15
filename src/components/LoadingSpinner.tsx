@@ -33,7 +33,7 @@ interface FullPageLoadingProps {
 
 export function FullPageLoading({ text = '加载中...' }: FullPageLoadingProps) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-sand-50" style={{ backgroundColor: '#F8F5F1' }}>
+    <div className="min-h-screen flex items-center justify-center bg-sand-50">
       <div className="text-center">
         <LoadingSpinner size="lg" />
         <p className="mt-4 text-gray-600">{text}</p>
@@ -65,7 +65,7 @@ export function LoadingState({
     return (
       <>
         {errorComponent || (
-          <div className="min-h-screen flex items-center justify-center bg-sand-50" style={{ backgroundColor: '#F8F5F1' }}>
+          <div className="min-h-screen flex items-center justify-center bg-sand-50">
             <div className="text-center max-w-md p-6">
               <div className="text-red-600 mb-4">
                 <svg className="h-12 w-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
