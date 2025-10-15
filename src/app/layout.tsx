@@ -29,13 +29,12 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        suppressHydrationWarning={true}
       >
         <ErrorBoundary>
-          <NoSSR>
-            <AuthProvider>
-              {children}
-            </AuthProvider>
-          </NoSSR>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
         </ErrorBoundary>
       </body>
     </html>

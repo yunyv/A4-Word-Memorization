@@ -190,9 +190,11 @@ export function ReviewCenterCard({ wordlistId, onStartReview, onStartTest }: Lea
                   <span className="text-sm text-gray-600">阶段 {stage}</span>
                   <div className="flex items-center">
                     <div className="w-32 bg-gray-200 rounded-full h-2 mr-2">
-                      <div 
-                        className="bg-blue-600 h-2 rounded-full" 
-                        style={{ width: `${(count / stats.totalWords) * 100}%` }} // 保留这个动态样式，因为它依赖于数据计算
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{
+                          width: typeof window !== 'undefined' ? `${(count / stats.totalWords) * 100}%` : '0%'
+                        }}
                       ></div>
                     </div>
                     <span className="text-sm text-gray-900 w-8 text-right">{count}</span>

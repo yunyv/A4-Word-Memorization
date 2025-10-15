@@ -25,16 +25,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  // 确保组件只在客户端挂载后才执行
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // 从localStorage恢复认证状态
   useEffect(() => {
+    if (!isMounted) return;
+    
     const token = localStorage.getItem('auth-token');
     if (token) {
       validateToken(token);
     } else {
       setUserState(prev => ({ ...prev, status: 'idle' }));
     }
-  }, []);
+  }, [isMounted]);
 
   // 验证令牌
   const validateToken = async (token: string) => {
@@ -55,7 +63,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       if (data.success && 'user' in data) {
         // 成功验证
-        localStorage.setItem('auth-token', token);
+        if (isMounted) {
+          localStorage.setItem('auth-token', token);
+        }
         setUserState({
           token,
           isAuthenticated: true,
@@ -65,7 +75,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return true;
       } else {
         // 验证失败
-        localStorage.removeItem('auth-token');
+        if (isMounted) {
+          localStorage.removeItem('auth-token');
+        }
         setUserState({
           token: null,
           isAuthenticated: false,
@@ -76,7 +88,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     } catch (err) {
       console.error('Token validation error:', err);
-      localStorage.removeItem('auth-token');
+      if (isMounted) {
+        localStorage.removeItem('auth-token');
+      }
       setUserState({
         token: null,
         isAuthenticated: false,
@@ -101,7 +115,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // 登出函数
   const logout = () => {
-    localStorage.removeItem('auth-token');
+    if (isMounted) {
+      localStorage.removeItem('auth-token');
+    }
     setUserState({
       token: null,
       isAuthenticated: false,
@@ -136,26 +152,23 @@ export function useAuth() {
 
 // 获取认证头的辅助函数
 export function getAuthHeaders(options: RequestInit = {}): Record<string, string> {
-  // 确保在客户端环境中运行
-  if (typeof window === 'undefined') {
-    // 服务器端，只设置基本headers
-    const headers: Record<string, string> = {};
-    if (!(options.body instanceof FormData)) {
-      headers['Content-Type'] = 'application/json';
-    }
-    return headers;
-  }
-  
-  const token = localStorage.getItem('auth-token');
   const headers: Record<string, string> = {};
-  
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
   
   // 如果body是FormData，不要设置Content-Type，让浏览器自动设置
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
+  }
+  
+  // 只在客户端环境中添加认证头
+  if (typeof window !== 'undefined') {
+    try {
+      const token = localStorage.getItem('auth-token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+    } catch (error) {
+      console.warn('无法访问 localStorage:', error);
+    }
   }
   
   return headers;
@@ -177,8 +190,12 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
   
   // 如果返回401，说明认证失效，清除本地存储
   if (response.status === 401 && typeof window !== 'undefined') {
-    localStorage.removeItem('auth-token');
-    window.location.href = '/token';
+    try {
+      localStorage.removeItem('auth-token');
+      window.location.href = '/token';
+    } catch (error) {
+      console.warn('无法访问 localStorage 或重定向:', error);
+    }
   }
   
   return response;
