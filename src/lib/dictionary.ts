@@ -43,6 +43,31 @@ export interface EnglishDefinition {
   }>;
 }
 
+// 音标和音频数据接口
+export interface PronunciationData {
+  american?: {
+    phonetic: string; // 美式音标，如 "[ˈbetər]"
+    audioUrl: string; // 美式发音音频URL
+  };
+  british?: {
+    phonetic: string; // 英式音标，如 "[ˈbetə(r)]"
+    audioUrl: string; // 英式发音音频URL
+  };
+}
+
+// 例句数据接口
+export interface Sentence {
+  number: number; // 例句序号
+  english: string; // 英文例句
+  chinese: string; // 中文例句
+  audioUrl?: string; // 例句音频URL
+  source?: string; // 例句来源
+  highlightedWords?: Array<{ // 高亮的单词
+    word: string;
+    className: string;
+  }>;
+}
+
 export interface DictionaryResult {
   success: boolean;
   word: string;
@@ -51,6 +76,8 @@ export interface DictionaryResult {
   data?: {
     extractedContent?: string;
     pronunciation?: string;
+    pronunciationData?: PronunciationData; // 新增的音标和音频数据
+    sentences?: Sentence[]; // 新增的例句数据
     fullHtml?: string;
     // 结构化的释义数据
     definitions?: {
@@ -225,6 +252,25 @@ export class DictionaryScraper {
         console.error('提取新释义类型失败:', e);
       }
 
+      // 提取音标和音频数据
+      let pronunciationData: PronunciationData = {};
+      try {
+        pronunciationData = this.extractPronunciationData($ as any);
+        console.log('提取的音标数据数量:',
+          (pronunciationData.american ? 1 : 0) + (pronunciationData.british ? 1 : 0));
+      } catch (e) {
+        console.error('提取音标和音频数据失败:', e);
+      }
+
+      // 提取例句数据
+      let sentences: Sentence[] = [];
+      try {
+        sentences = this.extractSentences($ as any);
+        console.log('提取的例句数量:', sentences.length);
+      } catch (e) {
+        console.error('提取例句数据失败:', e);
+      }
+
       // 使用CSS选择器提取例句内容
       // 对应XPath: //body/div[@id='content_container']/div[@class='client_search_container']/div[@class='client_search_content']/div[@class='client_search_leftside_area']/div[@class='client_search_sentence_area']/div[2]
       let extractedContent = '';
@@ -282,6 +328,8 @@ export class DictionaryScraper {
         data: {
           extractedContent: extractedContent.trim(),
           pronunciation: pronunciation,
+          pronunciationData: pronunciationData,
+          sentences: sentences,
           definitions: definitions,
           authoritativeDefinitions: authoritativeDefinitions,
           bilingualDefinitions: bilingualDefinitions,
@@ -562,6 +610,132 @@ export class DictionaryScraper {
     }
     
     return definitions;
+  }
+
+  // 提取音标和音频数据
+  private extractPronunciationData($: any): PronunciationData {
+    const pronunciationData: PronunciationData = {};
+    
+    try {
+      // 查找发音列表容器
+      const $pronunciationLists = $('.client_def_hd_pn_list');
+      
+      if ($pronunciationLists.length === 0) {
+        console.log('未找到发音列表容器 .client_def_hd_pn_list');
+        return pronunciationData;
+      }
+      
+      // 遍历每个发音列表
+      $pronunciationLists.each((index: number, element: any) => {
+        const $list = $(element);
+        const $phoneticElement = $list.find('.client_def_hd_pn');
+        const phoneticText = $phoneticElement.text().trim();
+        
+        if (!phoneticText) return;
+        
+        // 提取音标部分（去掉"美:"或"英:"前缀）
+        const phoneticMatch = phoneticText.match(/[^\[\]]+(\[.+\])/);
+        const phonetic = phoneticMatch ? phoneticMatch[1] : '';
+        
+        // 提取音频URL
+        const $audioElement = $list.find('.client_aud_o');
+        const audioUrl = $audioElement.attr('data-pronunciation') || '';
+        
+        // 构建完整的音频URL
+        const fullAudioUrl = audioUrl ? `https://cn.bing.com${audioUrl}` : '';
+        
+        // 判断是美式发音还是英式发音
+        if (phoneticText.includes('美:')) {
+          pronunciationData.american = {
+            phonetic,
+            audioUrl: fullAudioUrl
+          };
+        } else if (phoneticText.includes('英:')) {
+          pronunciationData.british = {
+            phonetic,
+            audioUrl: fullAudioUrl
+          };
+        }
+      });
+      
+      console.log('提取的音标数据:', pronunciationData);
+      
+    } catch (error) {
+      console.error('提取音标和音频数据时出错:', error);
+    }
+    
+    return pronunciationData;
+  }
+
+  // 提取例句数据
+  private extractSentences($: any): Sentence[] {
+    const sentences: Sentence[] = [];
+    
+    try {
+      // 查找例句列表容器
+      const $sentenceLists = $('.client_sentence_list');
+      
+      if ($sentenceLists.length === 0) {
+        console.log('未找到例句列表容器 .client_sentence_list');
+        return sentences;
+      }
+      
+      // 遍历每个例句
+      $sentenceLists.each((index: number, element: any) => {
+        const $sentence = $(element);
+        
+        // 提取序号
+        const numberText = $sentence.find('.client_sentence_list_num').text().trim();
+        const number = parseInt(numberText) || index + 1;
+        
+        // 提取英文例句
+        const $englishElement = $sentence.find('.client_sen_en');
+        const english = $englishElement.text().trim();
+        
+        // 提取中文例句
+        const $chineseElement = $sentence.find('.client_sen_cn');
+        const chinese = $chineseElement.text().trim();
+        
+        // 提取音频URL
+        const $audioElement = $sentence.find('.client_bdsen_audio');
+        const audioUrl = $audioElement.attr('data-mp3link') || '';
+        const fullAudioUrl = audioUrl ? `https://cn.bing.com${audioUrl}` : '';
+        
+        // 提取来源链接
+        const $sourceElement = $sentence.find('.client_sen_link');
+        const source = $sourceElement.text().trim();
+        
+        // 提取高亮的单词
+        const highlightedWords: Array<{ word: string; className: string }> = [];
+        $sentence.find('.client_sentence_search, .client_sen_en_word, .client_sen_cn_word').each((wordIndex: number, wordElement: any) => {
+          const $wordElement = $(wordElement);
+          const word = $wordElement.text().trim();
+          const className = $wordElement.attr('class') || '';
+          
+          if (word) {
+            highlightedWords.push({ word, className });
+          }
+        });
+        
+        if (english || chinese) {
+          sentences.push({
+            number,
+            english,
+            chinese,
+            audioUrl: fullAudioUrl,
+            source,
+            highlightedWords: highlightedWords.length > 0 ? highlightedWords : undefined
+          });
+        }
+      });
+      
+      console.log('提取的例句数量:', sentences.length);
+      
+    } catch (error) {
+      console.error('提取例句数据时出错:', error);
+    }
+    
+    return sentences;
   }
 
   // 测试方法，用于验证网站结构

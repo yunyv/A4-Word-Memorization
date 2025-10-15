@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { AuthoritativeDefinition, BilingualDefinition, EnglishDefinition } from '@/lib/dictionary';
+import { AuthoritativeDefinition, BilingualDefinition, EnglishDefinition, PronunciationData, Sentence } from '@/lib/dictionary';
 
 interface DictionaryResult {
   success: boolean;
@@ -30,6 +30,10 @@ interface DictionaryResult {
     authoritativeDefinitions?: AuthoritativeDefinition[];
     bilingualDefinitions?: BilingualDefinition[];
     englishDefinitions?: EnglishDefinition[];
+    // 新增的音标和音频数据
+    pronunciationData?: PronunciationData;
+    // 新增的例句数据
+    sentences?: Sentence[];
     // 测试模式可能返回的结构
     title?: string;
     hasContentContainer?: boolean;
@@ -207,6 +211,14 @@ export default function DictionaryTestPage() {
                       <p className="text-gray-700">{result.data?.pronunciation || '未找到发音信息'}</p>
                     </div>
                     
+                    {/* 新增的音标和音频显示 */}
+                    {result.data?.pronunciationData && (
+                      <div>
+                        <h3 className="font-semibold mb-2">音标与发音:</h3>
+                        <PronunciationDisplay pronunciationData={result.data.pronunciationData} />
+                      </div>
+                    )}
+                    
                      
                     {/* 新增的三种释义类型选项卡 */}
                     <div>
@@ -283,14 +295,22 @@ export default function DictionaryTestPage() {
                       </Tabs>
                     </div>
                     
-                    <div>
-                      <h3 className="font-semibold mb-2">例句 (XPath提取内容):</h3>
-                      <div className="bg-blue-50 p-3 rounded-md">
-                        <p className="text-gray-700">
-                          {result.data?.extractedContent || '未找到例句内容'}
-                        </p>
+                    {/* 新增的结构化例句显示 */}
+                    {result.data?.sentences && result.data.sentences.length > 0 ? (
+                      <div>
+                        <h3 className="font-semibold mb-2">例句:</h3>
+                        <SentenceDisplay sentences={result.data.sentences} />
                       </div>
-                    </div>
+                    ) : (
+                      <div>
+                        <h3 className="font-semibold mb-2">例句 (XPath提取内容):</h3>
+                        <div className="bg-blue-50 p-3 rounded-md">
+                          <p className="text-gray-700">
+                            {result.data?.extractedContent || '未找到例句内容'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                     
                     {process.env.NODE_ENV === 'development' && result.data?.fullHtml && (
                       <details className="mt-4">
@@ -439,3 +459,138 @@ const EnglishDefinitionDisplay = ({ definitions }: { definitions: EnglishDefinit
     ))}
   </div>
 );
+
+
+// 音标和音频显示组件
+const PronunciationDisplay = ({ pronunciationData }: { pronunciationData: PronunciationData }) => {
+  const [audioError, setAudioError] = useState<{ [key: string]: boolean }>({});
+
+  const handleAudioError = (type: string) => {
+    setAudioError(prev => ({ ...prev, [type]: true }));
+  };
+
+  return (
+    <div className="space-y-3">
+      {pronunciationData.american && (
+        <div className="flex items-center space-x-3 p-3 bg-blue-50 rounded-lg">
+          <span className="font-medium text-blue-700">美式:</span>
+          <span className="text-gray-700">{pronunciationData.american.phonetic}</span>
+          {pronunciationData.american.audioUrl && !audioError.american ? (
+            <audio 
+              controls 
+              src={pronunciationData.american.audioUrl}
+              onError={() => handleAudioError('american')}
+              className="h-8"
+            >
+              您的浏览器不支持音频播放。
+            </audio>
+          ) : (
+            <span className="text-sm text-gray-500">
+              {audioError.american ? '音频加载失败' : '无音频文件'}
+            </span>
+          )}
+        </div>
+      )}
+      
+      {pronunciationData.british && (
+        <div className="flex items-center space-x-3 p-3 bg-green-50 rounded-lg">
+          <span className="font-medium text-green-700">英式:</span>
+          <span className="text-gray-700">{pronunciationData.british.phonetic}</span>
+          {pronunciationData.british.audioUrl && !audioError.british ? (
+            <audio 
+              controls 
+              src={pronunciationData.british.audioUrl}
+              onError={() => handleAudioError('british')}
+              className="h-8"
+            >
+              您的浏览器不支持音频播放。
+            </audio>
+          ) : (
+            <span className="text-sm text-gray-500">
+              {audioError.british ? '音频加载失败' : '无音频文件'}
+            </span>
+          )}
+        </div>
+      )}
+      
+      {!pronunciationData.american && !pronunciationData.british && (
+        <p className="text-gray-500">未找到音标和音频信息</p>
+      )}
+    </div>
+  );
+};
+
+
+// 例句显示组件
+const SentenceDisplay = ({ sentences }: { sentences: Sentence[] }) => {
+  const [audioError, setAudioError] = useState<{ [key: string]: boolean }>({});
+
+  const handleAudioError = (index: number) => {
+    setAudioError(prev => ({ ...prev, [index]: true }));
+  };
+
+  const renderHighlightedText = (text: string, highlightedWords?: Array<{ word: string; className: string }>) => {
+    if (!highlightedWords || highlightedWords.length === 0) {
+      return text;
+    }
+
+    let result = text;
+    highlightedWords.forEach(({ word, className }) => {
+      if (word && result.includes(word)) {
+        const isHighlighted = className.includes('client_sentence_search');
+        const colorClass = isHighlighted ? 'text-blue-600 font-semibold' : 'text-gray-700';
+        result = result.replace(new RegExp(word, 'g'), `<span class="${colorClass}">${word}</span>`);
+      }
+    });
+
+    return <span dangerouslySetInnerHTML={{ __html: result }} />;
+  };
+
+  return (
+    <div className="space-y-4">
+      {sentences.map((sentence, index) => (
+        <div key={index} className="border rounded-lg p-4 bg-gray-50">
+          <div className="flex items-start justify-between mb-2">
+            <span className="font-medium text-gray-500 bg-white px-2 py-1 rounded">
+              {sentence.number}.
+            </span>
+            {sentence.source && (
+              <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded">
+                来源: {sentence.source}
+              </span>
+            )}
+          </div>
+          
+          <div className="space-y-2">
+            <div className="text-gray-800">
+              {renderHighlightedText(sentence.english, sentence.highlightedWords)}
+            </div>
+            
+            <div className="text-gray-600">
+              {renderHighlightedText(sentence.chinese, sentence.highlightedWords)}
+            </div>
+            
+            {sentence.audioUrl && !audioError[index] && (
+              <div className="mt-2">
+                <audio 
+                  controls 
+                  src={sentence.audioUrl}
+                  onError={() => handleAudioError(index)}
+                  className="h-8"
+                >
+                  您的浏览器不支持音频播放。
+                </audio>
+              </div>
+            )}
+            
+            {sentence.audioUrl && audioError[index] && (
+              <div className="mt-2 text-sm text-red-500">
+                音频加载失败
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
