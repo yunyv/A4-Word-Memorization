@@ -129,10 +129,30 @@ export function WordDisplay({
       {showDefinition && wordDefinition && (
         <div className="w-full max-w-2xl bg-white rounded-lg shadow-lg p-6 border">
           {/* 基本释义 */}
-          {wordDefinition.basicDefinition && (
+          {wordDefinition.definitions && wordDefinition.definitions.basic && wordDefinition.definitions.basic.length > 0 && (
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">基本释义</h3>
-              <p className="text-gray-700">{wordDefinition.basicDefinition}</p>
+              <ul className="space-y-1">
+                {wordDefinition.definitions.basic.map((def: any, index: number) => (
+                  <li key={index} className="text-gray-700">
+                    <span className="font-medium">{def.partOfSpeech}</span> {def.meaning}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          
+          {/* 网络释义 */}
+          {wordDefinition.definitions && wordDefinition.definitions.web && wordDefinition.definitions.web.length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">网络释义</h3>
+              <ul className="space-y-1">
+                {wordDefinition.definitions.web.map((def: any, index: number) => (
+                  <li key={index} className="text-gray-700">
+                    {def.meaning}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
           
@@ -140,14 +160,34 @@ export function WordDisplay({
           {wordDefinition.authoritativeDefinitions && wordDefinition.authoritativeDefinitions.length > 0 && (
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">权威英汉释义</h3>
-              <ul className="space-y-1">
-                {wordDefinition.authoritativeDefinitions.map((def: any, index: number) => (
-                  <li key={index} className="text-gray-700">
-                    <span className="font-medium">{index + 1}. </span>
-                    {def.definition}
-                  </li>
-                ))}
-              </ul>
+              {wordDefinition.authoritativeDefinitions.map((authDef: any, index: number) => (
+                <div key={index} className="mb-3">
+                  <p className="font-medium text-gray-800">{authDef.partOfSpeech}</p>
+                  <ul className="space-y-1 ml-4">
+                    {authDef.definitions.map((def: any, defIndex: number) => (
+                      <li key={defIndex} className="text-gray-700">
+                        <span className="font-medium">{def.number}. </span>
+                        {def.chineseMeaning && <span>{def.chineseMeaning}</span>}
+                        {def.englishMeaning && <span className="text-gray-600"> ({def.englishMeaning})</span>}
+                      </li>
+                    ))}
+                  </ul>
+                  
+                  {/* 习语 */}
+                  {authDef.idioms && authDef.idioms.length > 0 && (
+                    <div className="mt-2 ml-4">
+                      <p className="font-medium text-gray-800">习语:</p>
+                      <ul className="space-y-1">
+                        {authDef.idioms.map((idiom: any, idiomIndex: number) => (
+                          <li key={idiomIndex} className="text-gray-700">
+                            <span className="font-medium">{idiom.number}. {idiom.title}</span> - {idiom.meaning}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
           
@@ -155,14 +195,19 @@ export function WordDisplay({
           {wordDefinition.bilingualDefinitions && wordDefinition.bilingualDefinitions.length > 0 && (
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">英汉释义</h3>
-              <ul className="space-y-1">
-                {wordDefinition.bilingualDefinitions.map((def: any, index: number) => (
-                  <li key={index} className="text-gray-700">
-                    <span className="font-medium">{index + 1}. </span>
-                    {def.definition}
-                  </li>
-                ))}
-              </ul>
+              {wordDefinition.bilingualDefinitions.map((bilDef: any, index: number) => (
+                <div key={index} className="mb-3">
+                  <p className="font-medium text-gray-800">{bilDef.partOfSpeech}</p>
+                  <ul className="space-y-1 ml-4">
+                    {bilDef.definitions.map((def: any, defIndex: number) => (
+                      <li key={defIndex} className="text-gray-700">
+                        <span className="font-medium">{def.number}. </span>
+                        {def.meaning}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
           )}
           
@@ -170,14 +215,33 @@ export function WordDisplay({
           {wordDefinition.englishDefinitions && wordDefinition.englishDefinitions.length > 0 && (
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">英英释义</h3>
-              <ul className="space-y-1">
-                {wordDefinition.englishDefinitions.map((def: any, index: number) => (
-                  <li key={index} className="text-gray-700">
-                    <span className="font-medium">{index + 1}. </span>
-                    {def.definition}
-                  </li>
+              {wordDefinition.englishDefinitions.map((engDef: any, index: number) => (
+                <div key={index} className="mb-3">
+                  <p className="font-medium text-gray-800">{engDef.partOfSpeech}</p>
+                  <ul className="space-y-1 ml-4">
+                    {engDef.definitions.map((def: any, defIndex: number) => (
+                      <li key={defIndex} className="text-gray-700">
+                        <span className="font-medium">{def.number}. </span>
+                        {def.meaning}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {/* 词形变化 */}
+          {wordDefinition.wordForms && wordDefinition.wordForms.length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">词形变化</h3>
+              <div className="flex flex-wrap gap-2">
+                {wordDefinition.wordForms.map((form: any, index: number) => (
+                  <span key={index} className="bg-gray-100 px-2 py-1 rounded text-sm">
+                    {form.form}: {form.word}
+                  </span>
                 ))}
-              </ul>
+              </div>
             </div>
           )}
           
@@ -185,12 +249,12 @@ export function WordDisplay({
           {sentences && sentences.length > 0 && (
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">例句</h3>
-              <ul className="space-y-2">
+              <ul className="space-y-3">
                 {sentences.slice(0, 3).map((sentence: any, index: number) => (
-                  <li key={index} className="text-gray-700">
-                    <p className="italic">{sentence.sentence}</p>
-                    {sentence.translation && (
-                      <p className="text-sm text-gray-600 mt-1">{sentence.translation}</p>
+                  <li key={index} className="text-gray-700 border-l-2 border-blue-200 pl-3">
+                    <p className="italic">{sentence.english}</p>
+                    {sentence.chinese && (
+                      <p className="text-sm text-gray-600 mt-1">{sentence.chinese}</p>
                     )}
                   </li>
                 ))}

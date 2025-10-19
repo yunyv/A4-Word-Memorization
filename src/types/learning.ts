@@ -12,7 +12,7 @@ export interface LearningState {
   sessionType: 'new' | 'review' | 'test' | null;
   wordQueue: string[]; // 存储待学习/复习的单词文本队列
   currentWordText: string | null; // 当前显示的单词文本
-  currentWordData: Word | null; // 当前单词的完整数据（含释义）
+  currentWordData: any | null; // 当前单词的完整数据（含释义）
   currentIndex: number; // 当前单词在队列中的索引
   status: 'idle' | 'active' | 'finished';
   wordlistId?: number; // 当前学习的词书ID

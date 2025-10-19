@@ -255,8 +255,8 @@ export default function LearningPage() {
             <WordDisplay
               wordText={learningState.currentWordText}
               wordDefinition={learningState.currentWordData}
-              pronunciationData={learningState.currentWordData?.definition_data?.pronunciationData}
-              sentences={learningState.currentWordData?.definition_data?.sentences}
+              pronunciationData={learningState.currentWordData?.pronunciationData}
+              sentences={learningState.currentWordData?.sentences}
               fontSize={32}
             />
           )}

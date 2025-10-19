@@ -70,6 +70,19 @@ export async function GET(request: NextRequest) {
           });
         }
         
+        // 检查单词是否存在但没有有效数据（空记录）
+        const existingWord = await db.word.findUnique({
+          where: { wordText: word!.toLowerCase() }
+        });
+        
+        if (existingWord) {
+          console.log(`单词 ${word} 存在但无有效数据，将重新爬取`);
+          // 删除现有空记录，以便重新创建
+          await db.word.delete({
+            where: { id: existingWord.id }
+          });
+        }
+        
         // 如果新表结构中没有数据，尝试从JSON字段获取
         const cachedWord = await db.word.findUnique({
           where: { wordText: word!.toLowerCase() }
@@ -142,12 +155,18 @@ export async function GET(request: NextRequest) {
 // 从新表结构中获取单词数据
 async function getWordFromTables(wordText: string): Promise<any> {
   try {
+    console.log(`查询单词: ${wordText}`);
     // 先获取单词基本信息
     const word = await db.word.findUnique({
       where: { wordText: wordText.toLowerCase() }
     });
 
-    if (!word) return null;
+    console.log(`查询结果:`, word);
+    
+    if (!word) {
+      console.log(`单词 ${wordText} 在数据库中不存在，返回 null`);
+      return null;
+    }
 
     // 分别获取关联数据
     const pronunciations = await db.$queryRaw`
@@ -209,6 +228,21 @@ async function getWordFromTables(wordText: string): Promise<any> {
 
 // 将表结构数据转换为JSON格式
 function convertTablesToJson(word: any): any {
+  // 检查是否有任何有效数据
+  const hasValidData =
+    (word.pronunciations && word.pronunciations.length > 0) ||
+    (word.definitions && word.definitions.length > 0) ||
+    (word.sentences && word.sentences.length > 0) ||
+    (word.wordForms && word.wordForms.length > 0) ||
+    (word.definitionExamples && word.definitionExamples.length > 0) ||
+    (word.definitionIdioms && word.definitionIdioms.length > 0) ||
+    (word.idiomExamples && word.idiomExamples.length > 0);
+  
+  if (!hasValidData) {
+    console.log('没有找到有效数据，返回 null');
+    return null;
+  }
+
   const result: any = {
     pronunciation: word.pronunciation,
     definitions: {
