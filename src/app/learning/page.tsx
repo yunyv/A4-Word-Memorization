@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useLearning } from '@/hooks/useLearning';
 import { WordDisplay } from '@/components/learning/WordDisplay';
+import { InitializingProgress } from '@/components/learning/InitializingProgress';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowLeft, ArrowRight, Check, X, Home, Settings } from 'lucide-react';
@@ -121,6 +122,11 @@ export default function LearningPage() {
     );
   }
 
+  // 如果正在初始化学习进度，显示初始化进度组件
+  if (isLoading && error && error.includes('初始化')) {
+    return <InitializingProgress message={error} />;
+  }
+
   // 如果会话未开始或已结束
   if (learningState.status === 'idle' || learningState.status === 'finished') {
     return (
@@ -138,15 +144,21 @@ export default function LearningPage() {
               <>
                 <h2 className="text-2xl font-bold text-gray-900 mb-4">准备学习</h2>
                 <p className="text-gray-600 mb-6">
-                  正在为您准备学习内容...
+                  {isLoading ? '正在为您准备学习内容...' : '点击下方按钮开始学习'}
                 </p>
               </>
             )}
             
             <div className="space-y-2">
-              <Button onClick={handleBackToDashboard} className="w-full">
-                返回仪表盘
-              </Button>
+              {isLoading ? (
+                <div className="flex justify-center py-2">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : (
+                <Button onClick={handleBackToDashboard} className="w-full">
+                  返回仪表盘
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -156,14 +168,34 @@ export default function LearningPage() {
 
   // 如果有错误
   if (error) {
+    // 检查是否是初始化相关的错误
+    const isInitError = error.includes('初始化');
+    
     return (
       <div className="min-h-screen flex items-center justify-center bg-sand-50">
         <Card className="w-full max-w-md shadow-lg">
           <CardContent className="p-8 text-center">
-            <h2 className="text-2xl font-bold text-red-600 mb-4">出错了</h2>
+            <h2 className="text-2xl font-bold text-red-600 mb-4">
+              {isInitError ? '初始化问题' : '出错了'}
+            </h2>
             <p className="text-gray-600 mb-6">{error}</p>
             
+            {isInitError && (
+              <p className="text-sm text-gray-500 mb-4">
+                首次使用需要初始化学习进度，如果问题持续存在，请刷新页面重试。
+              </p>
+            )}
+            
             <div className="space-y-2">
+              {isInitError && (
+                <Button
+                  onClick={() => window.location.reload()}
+                  variant="outline"
+                  className="w-full mb-2"
+                >
+                  刷新页面
+                </Button>
+              )}
               <Button onClick={handleBackToDashboard} variant="outline" className="w-full">
                 返回仪表盘
               </Button>

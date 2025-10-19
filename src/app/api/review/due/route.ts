@@ -37,6 +37,76 @@ export async function GET(request: NextRequest) {
         lte: new Date() // 小于或等于今天的日期
       }
     };
+    
+    // 检查是否是新学习模式（通过查询参数判断）
+    const isNewMode = searchParams.get('newMode') === 'true';
+    
+    // 如果是新学习模式，优先获取复习阶段为0的单词
+    if (isNewMode) {
+      // 首先尝试获取复习阶段为0的单词
+      const newWordsCondition = {
+        ...whereCondition,
+        reviewStage: 0
+      };
+      
+      // 如果指定了词书ID，添加到查询条件
+      if (wordlistId) {
+        // 验证用户是否有权限访问该词书
+        const wordlist = await db.wordlist.findUnique({
+          where: {
+            id: parseInt(wordlistId),
+            userId: user.id
+          }
+        });
+
+        if (!wordlist) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'Wordlist not found or you do not have permission to access it'
+            },
+            { status: 404 }
+          );
+        }
+
+        // 获取词书中的所有单词ID
+        const wordlistEntries = await db.wordlistEntry.findMany({
+          where: { wordlistId: parseInt(wordlistId) },
+          select: { wordId: true }
+        });
+
+        const wordIds = wordlistEntries.map((entry: any) => entry.wordId);
+        newWordsCondition.wordId = { in: wordIds };
+      }
+      
+      // 查询复习阶段为0的单词
+      const newWords = await db.userWordProgress.findMany({
+        where: newWordsCondition,
+        include: {
+          word: {
+            select: {
+              wordText: true
+            }
+          }
+        },
+        orderBy: {
+          createdAt: 'asc' // 按创建时间升序排列，先创建的先学习
+        },
+        take: limit
+      });
+      
+      // 如果有新单词，直接返回
+      if (newWords.length > 0) {
+        const words = newWords.map((progress: any) => progress.word.wordText);
+        return NextResponse.json({
+          success: true,
+          words,
+          count: words.length
+        } as DueWordsResponse);
+      }
+      
+      // 如果没有新单词，继续执行原有逻辑获取其他待复习单词
+    }
 
     // 如果指定了词书ID，添加到查询条件
     if (wordlistId) {

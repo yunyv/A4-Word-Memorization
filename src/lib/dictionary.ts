@@ -1,5 +1,6 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import { db } from './db';
 
 // 权威英汉释义结构
 export interface AuthoritativeDefinition {
@@ -773,6 +774,269 @@ export class DictionaryScraper {
     } catch (error) {
       console.error('测试网站结构时出错:', error);
       return { error: error instanceof Error ? error.message : '未知错误' };
+    }
+  }
+
+  // 将爬取的数据保存到新的表结构中
+  async saveWordDataToTables(wordText: string, data: any): Promise<void> {
+    try {
+      // 使用事务确保数据一致性
+      await db.$transaction(async (tx) => {
+        // 1. 更新或创建单词记录
+        const word = await tx.word.upsert({
+          where: { wordText: wordText.toLowerCase() },
+          update: {
+            definitionData: data, // 保留JSON数据作为备份
+            updatedAt: new Date()
+          },
+          create: {
+            wordText: wordText.toLowerCase(),
+            definitionData: data
+          }
+        });
+
+        // 如果有发音数据，单独更新pronunciation字段
+        if (data.pronunciation) {
+          await tx.$executeRaw`UPDATE Words SET pronunciation = ${data.pronunciation} WHERE id = ${word.id}`;
+        }
+
+        // 2. 保存发音数据
+        if (data.pronunciationData) {
+          await this.savePronunciationData(tx, word.id, data.pronunciationData);
+        }
+
+        // 3. 保存释义数据
+        if (data.definitions) {
+          await this.saveDefinitionData(tx, word.id, data.definitions);
+        }
+
+        // 4. 保存权威英汉释义
+        if (data.authoritativeDefinitions) {
+          await this.saveAuthoritativeDefinitions(tx, word.id, data.authoritativeDefinitions);
+        }
+
+        // 5. 保存英汉释义
+        if (data.bilingualDefinitions) {
+          await this.saveBilingualDefinitions(tx, word.id, data.bilingualDefinitions);
+        }
+
+        // 6. 保存英英释义
+        if (data.englishDefinitions) {
+          await this.saveEnglishDefinitions(tx, word.id, data.englishDefinitions);
+        }
+
+        // 7. 保存例句数据
+        if (data.sentences && data.sentences.length > 0) {
+          await this.saveSentenceData(tx, word.id, data.sentences);
+        }
+
+        // 8. 保存词形变化
+        if (data.wordForms && data.wordForms.length > 0) {
+          await this.saveWordForms(tx, word.id, data.wordForms);
+        }
+      });
+
+      console.log(`单词 ${wordText} 已保存到新表结构`);
+    } catch (error) {
+      console.error(`保存单词 ${wordText} 到新表结构时出错:`, error);
+      throw error;
+    }
+  }
+
+  private async savePronunciationData(tx: any, wordId: number, pronunciationData: any): Promise<void> {
+    // 美式发音
+    if (pronunciationData.american) {
+      await tx.$executeRaw`
+        INSERT INTO WordPronunciations (word_id, type, phonetic, audio_url, created_at, updated_at)
+        VALUES (${wordId}, 'american', ${pronunciationData.american.phonetic}, ${pronunciationData.american.audioUrl}, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+        phonetic = ${pronunciationData.american.phonetic},
+        audio_url = ${pronunciationData.american.audioUrl},
+        updated_at = NOW()
+      `;
+    }
+
+    // 英式发音
+    if (pronunciationData.british) {
+      await tx.$executeRaw`
+        INSERT INTO WordPronunciations (word_id, type, phonetic, audio_url, created_at, updated_at)
+        VALUES (${wordId}, 'british', ${pronunciationData.british.phonetic}, ${pronunciationData.british.audioUrl}, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+        phonetic = ${pronunciationData.british.phonetic},
+        audio_url = ${pronunciationData.british.audioUrl},
+        updated_at = NOW()
+      `;
+    }
+  }
+
+  private async saveDefinitionData(tx: any, wordId: number, definitions: any): Promise<void> {
+    // 基本释义
+    if (definitions.basic && definitions.basic.length > 0) {
+      for (let i = 0; i < definitions.basic.length; i++) {
+        const def = definitions.basic[i];
+        await tx.wordDefinition.create({
+          data: {
+            wordId,
+            type: 'basic',
+            partOfSpeech: def.partOfSpeech,
+            order: i,
+            meaning: def.meaning
+          }
+        });
+      }
+    }
+
+    // 网络释义
+    if (definitions.web && definitions.web.length > 0) {
+      for (let i = 0; i < definitions.web.length; i++) {
+        const def = definitions.web[i];
+        await tx.wordDefinition.create({
+          data: {
+            wordId,
+            type: 'web',
+            order: i,
+            meaning: def.meaning
+          }
+        });
+      }
+    }
+  }
+
+  private async saveAuthoritativeDefinitions(tx: any, wordId: number, authoritativeDefinitions: any[]): Promise<void> {
+    for (const authDef of authoritativeDefinitions) {
+      // 创建主释义记录
+      const definition = await tx.wordDefinition.create({
+        data: {
+          wordId,
+          type: 'authoritative',
+          partOfSpeech: authDef.partOfSpeech,
+          order: 0 // 可以根据需要调整排序
+        }
+      });
+
+      // 创建释义条目
+      for (const defItem of authDef.definitions) {
+        await tx.definitionExample.create({
+          data: {
+            definitionId: definition.id,
+            order: defItem.number,
+            english: defItem.englishMeaning || '',
+            chinese: defItem.chineseMeaning || ''
+          }
+        });
+
+        // 如果有例句，创建例句记录
+        if (defItem.examples && defItem.examples.length > 0) {
+          for (const example of defItem.examples) {
+            await tx.definitionExample.create({
+              data: {
+                definitionId: definition.id,
+                order: defItem.number,
+                english: example.english,
+                chinese: example.chinese
+              }
+            });
+          }
+        }
+      }
+
+      // 处理习语
+      if (authDef.idioms && authDef.idioms.length > 0) {
+        for (const idiom of authDef.idioms) {
+          const idiomRecord = await tx.definitionIdiom.create({
+            data: {
+              definitionId: definition.id,
+              order: idiom.number,
+              title: idiom.title,
+              meaning: idiom.meaning
+            }
+          });
+
+          // 创建习语例句
+          if (idiom.examples && idiom.examples.length > 0) {
+            for (const example of idiom.examples) {
+              await tx.idiomExample.create({
+                data: {
+                  idiomId: idiomRecord.id,
+                  order: 0,
+                  english: example.english,
+                  chinese: example.chinese
+                }
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private async saveBilingualDefinitions(tx: any, wordId: number, bilingualDefinitions: any[]): Promise<void> {
+    for (const bilDef of bilingualDefinitions) {
+      const definition = await tx.wordDefinition.create({
+        data: {
+          wordId,
+          type: 'bilingual',
+          partOfSpeech: bilDef.partOfSpeech,
+          order: 0
+        }
+      });
+
+      // 创建释义条目
+      for (const defItem of bilDef.definitions) {
+        await tx.definitionExample.create({
+          data: {
+            definitionId: definition.id,
+            order: defItem.number,
+            english: '',
+            chinese: defItem.meaning
+          }
+        });
+      }
+    }
+  }
+
+  private async saveEnglishDefinitions(tx: any, wordId: number, englishDefinitions: any[]): Promise<void> {
+    for (const engDef of englishDefinitions) {
+      // 创建释义条目
+      for (const defItem of engDef.definitions) {
+        await tx.wordDefinition.create({
+          data: {
+            wordId,
+            type: 'english',
+            partOfSpeech: engDef.partOfSpeech,
+            order: defItem.number,
+            meaning: defItem.meaning,
+            linkedWords: defItem.linkedWords ? JSON.stringify(defItem.linkedWords) : null
+          }
+        });
+      }
+    }
+  }
+
+  private async saveSentenceData(tx: any, wordId: number, sentences: any[]): Promise<void> {
+    for (const sentence of sentences) {
+      await tx.wordSentence.create({
+        data: {
+          wordId,
+          order: sentence.number,
+          english: sentence.english,
+          chinese: sentence.chinese,
+          audioUrl: sentence.audioUrl,
+          source: sentence.source
+        }
+      });
+    }
+  }
+
+  private async saveWordForms(tx: any, wordId: number, wordForms: any[]): Promise<void> {
+    for (const wordForm of wordForms) {
+      await tx.$executeRaw`
+        INSERT INTO WordForms (word_id, form_type, form_word, created_at, updated_at)
+        VALUES (${wordId}, ${wordForm.form}, ${wordForm.word}, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+        form_word = ${wordForm.word},
+        updated_at = NOW()
+      `;
     }
   }
 }

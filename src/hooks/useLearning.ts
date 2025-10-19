@@ -6,6 +6,52 @@ import { authFetch } from './useAuth';
 import { EBBINGHAUS_INTERVAL_MAP } from '@/types/learning';
 import { cachedFetch, generateCacheKey } from '@/lib/cacheUtils';
 
+// 初始化用户学习进度的API调用
+const initializeUserProgress = async (wordlistId?: number): Promise<boolean> => {
+  try {
+    const response = await authFetch('/api/learning/initialize', {
+      method: 'POST',
+      body: JSON.stringify({ wordlistId })
+    });
+    
+    const data = await response.json();
+    return data.success;
+  } catch (error) {
+    console.error('Error initializing user progress:', error);
+    return false;
+  }
+};
+
+// 检查用户学习进度初始化状态
+const checkInitializationStatus = async (wordlistId?: number): Promise<{
+  isFullyInitialized: boolean;
+  totalWords: number;
+  initializedWords: number;
+}> => {
+  try {
+    let url = '/api/learning/initialize';
+    if (wordlistId) {
+      url += `?wordlistId=${wordlistId}`;
+    }
+    
+    const response = await authFetch(url);
+    const data = await response.json();
+    
+    if (data.success) {
+      return {
+        isFullyInitialized: data.status.isFullyInitialized,
+        totalWords: data.status.totalWords,
+        initializedWords: data.status.initializedWords
+      };
+    }
+    
+    return { isFullyInitialized: false, totalWords: 0, initializedWords: 0 };
+  } catch (error) {
+    console.error('Error checking initialization status:', error);
+    return { isFullyInitialized: false, totalWords: 0, initializedWords: 0 };
+  }
+};
+
 export function useLearning() {
   const [learningState, setLearningState] = useState<LearningState>({
     sessionType: null,
@@ -19,17 +65,20 @@ export function useLearning() {
   const [error, setError] = useState<string | null>(null);
 
   // 获取待复习的单词
-  const fetchDueWords = useCallback(async (wordlistId?: number, limit: number = 50): Promise<DueWordsResponse | null> => {
+  const fetchDueWords = useCallback(async (wordlistId?: number, limit: number = 50, isNewMode: boolean = false): Promise<DueWordsResponse | null> => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const cacheKey = generateCacheKey('dueWords', { wordlistId, limit });
+      const cacheKey = generateCacheKey('dueWords', { wordlistId, limit, isNewMode });
       
       const data = await cachedFetch(cacheKey, async () => {
         let url = '/api/review/due?limit=' + limit;
         if (wordlistId) {
           url += '&wordlistId=' + wordlistId;
+        }
+        if (isNewMode) {
+          url += '&newMode=true';
         }
 
         const response = await authFetch(url);
@@ -85,9 +134,38 @@ export function useLearning() {
         }
       } else {
         // 新学习或复习模式：获取待复习的单词
-        const data = await fetchDueWords(wordlistId, limit);
+        const isNewMode = sessionType === 'new';
+        let data = await fetchDueWords(wordlistId, limit, isNewMode);
         
-        if (data && data.success) {
+        // 如果没有待复习单词，检查是否需要初始化
+        if (!data || !data.success || data.words.length === 0) {
+          // 检查初始化状态
+          const initStatus = await checkInitializationStatus(wordlistId);
+          
+          if (!initStatus.isFullyInitialized && initStatus.totalWords > 0) {
+            // 需要初始化，显示初始化提示
+            setError('正在初始化学习进度，请稍候...');
+            
+            // 调用初始化API
+            const initSuccess = await initializeUserProgress(wordlistId);
+            
+            if (initSuccess) {
+              // 初始化成功，重新获取待复习单词
+              data = await fetchDueWords(wordlistId, limit, isNewMode);
+              
+              // 清除缓存以确保获取最新数据
+              if (wordlistId) {
+                const cacheKey = generateCacheKey('dueWords', { wordlistId, limit, isNewMode });
+                // 这里可以添加清除缓存的逻辑
+              }
+            } else {
+              setError('初始化学习进度失败，请重试');
+              return false;
+            }
+          }
+        }
+        
+        if (data && data.success && data.words.length > 0) {
           if (sessionType === 'new') {
             // 新学习模式：优先选择复习阶段为0的单词
             const response = await authFetch('/api/review/due', {
@@ -126,7 +204,19 @@ export function useLearning() {
             return true;
           }
         } else {
-          setError('No due words found');
+          // 检查是否有词书但没有单词
+          if (wordlistId) {
+            const wordlistResponse = await authFetch(`/api/wordlists/${wordlistId}`);
+            const wordlistData = await wordlistResponse.json();
+            
+            if (wordlistData.success && wordlistData.wordlist.words.length === 0) {
+              setError('该词书中没有单词，请先上传单词');
+            } else {
+              setError('没有找到可学习的单词，请稍后再试');
+            }
+          } else {
+            setError('没有找到可学习的单词，请先创建或上传词书');
+          }
           return false;
         }
       }

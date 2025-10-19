@@ -1,3 +1,8 @@
+# 新的 Prisma Schema 文件内容
+
+这是更新后的 `prisma/schema.prisma` 文件内容，添加了新的表结构来优化单词数据存储。
+
+```prisma
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
@@ -66,20 +71,6 @@ model Word {
   userWordProgress UserWordProgress[]
 
   @@map("Words")
-}
-
-// 词书条目表：词书和单词的多对多关联
-model WordlistEntry {
-  id         Int @id @default(autoincrement())
-  wordlistId Int @map("wordlist_id")
-  wordId     Int @map("word_id")
-
-  // 关联关系
-  wordlist Wordlist @relation(fields: [wordlistId], references: [id], onDelete: Cascade)
-  word     Word     @relation(fields: [wordId], references: [id], onDelete: Cascade)
-
-  @@unique([wordlistId, wordId])
-  @@map("WordlistEntries")
 }
 
 // 单词发音表
@@ -223,6 +214,20 @@ model WordForm {
   @@map("WordForms")
 }
 
+// 词书条目表：词书和单词的多对多关联
+model WordlistEntry {
+  id         Int @id @default(autoincrement())
+  wordlistId Int @map("wordlist_id")
+  wordId     Int @map("word_id")
+
+  // 关联关系
+  wordlist Wordlist @relation(fields: [wordlistId], references: [id], onDelete: Cascade)
+  word     Word     @relation(fields: [wordId], references: [id], onDelete: Cascade)
+
+  @@unique([wordlistId, wordId])
+  @@map("WordlistEntries")
+}
+
 // 用户单词进度表：跟踪每个用户对每个单词的学习进度
 model UserWordProgress {
   id              Int      @id @default(autoincrement())
@@ -241,3 +246,30 @@ model UserWordProgress {
   @@unique([userId, wordId])
   @@map("UserWordProgress")
 }
+```
+
+## 主要变更说明
+
+1. **Words 表更新**：
+   - 添加了 `pronunciation` 字段存储基本发音信息
+   - 保留了 `definitionData` JSON 字段作为备份
+
+2. **新增表结构**：
+   - `WordPronunciations`：存储美式和英式发音及音频
+   - `WordDefinitions`：存储各种类型的释义
+   - `DefinitionExamples`：存储释义中的例句
+   - `DefinitionIdioms`：存储释义中的习语
+   - `IdiomExamples`：存储习语中的例句
+   - `WordSentences`：存储独立的例句
+   - `WordForms`：存储词形变化
+
+3. **索引优化**：
+   - 为常用查询字段添加了索引
+   - 为复合查询添加了复合索引
+
+## 下一步操作
+
+1. 将此内容替换到 `prisma/schema.prisma` 文件
+2. 运行 `prisma migrate dev` 创建迁移文件
+3. 运行 `prisma generate` 更新 Prisma 客户端
+4. 创建数据迁移脚本，将现有 JSON 数据迁移到新表结构
