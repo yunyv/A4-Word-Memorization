@@ -1,10 +1,26 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { DueWordsResponse, ReviewProgressResponse, LearningState } from '@/types/learning';
 import { authFetch } from './useAuth';
 import { EBBINGHAUS_INTERVAL_MAP } from '@/types/learning';
 import { cachedFetch, generateCacheKey } from '@/lib/cacheUtils';
+
+// 单词数据缓存接口
+interface WordDataCache {
+  [wordText: string]: {
+    data: any;
+    timestamp: number;
+    expiry: number;
+  };
+}
+
+// 预加载队列任务
+interface PreloadTask {
+  wordText: string;
+  priority: number;
+  retryCount: number;
+}
 
 // 初始化用户学习进度的API调用
 const initializeUserProgress = async (wordlistId?: number): Promise<boolean> => {
@@ -64,6 +80,144 @@ export function useLearning() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 单词数据缓存（30分钟过期）
+  const wordDataCache = useRef<WordDataCache>({});
+  const CACHE_EXPIRY = 30 * 60 * 1000; // 30分钟
+
+  // 预加载管理
+  const preloadQueue = useRef<PreloadTask[]>([]);
+  const isPreloading = useRef(false);
+  const preloadPromise = useRef<Promise<void> | null>(null);
+
+  // 检查缓存是否有效
+  const isCacheValid = useCallback((wordText: string): boolean => {
+    const cached = wordDataCache.current[wordText];
+    if (!cached) return false;
+    return Date.now() - cached.timestamp < cached.expiry;
+  }, []);
+
+  // 获取缓存的单词数据
+  const getCachedWordData = useCallback((wordText: string): any | null => {
+    if (isCacheValid(wordText)) {
+      return wordDataCache.current[wordText].data;
+    }
+    // 清理过期缓存
+    delete wordDataCache.current[wordText];
+    return null;
+  }, [isCacheValid]);
+
+  // 设置单词数据缓存
+  const setCachedWordData = useCallback((wordText: string, data: any): void => {
+    wordDataCache.current[wordText] = {
+      data,
+      timestamp: Date.now(),
+      expiry: CACHE_EXPIRY
+    };
+  }, []);
+
+  // 获取单个单词数据（内部方法）
+  const fetchWordDataInternal = useCallback(async (wordText: string): Promise<any | null> => {
+    try {
+      // 检查缓存
+      const cached = getCachedWordData(wordText);
+      if (cached) {
+        return cached;
+      }
+
+      // 从API获取数据
+      const response = await authFetch(`/api/dictionary?word=${wordText}&type=all`);
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        // 缓存数据
+        setCachedWordData(wordText, data.data);
+        return data.data;
+      } else {
+        console.warn(`Failed to fetch data for word: ${wordText}`);
+        return null;
+      }
+    } catch (error) {
+      console.error(`Error fetching word data for ${wordText}:`, error);
+      return null;
+    }
+  }, [getCachedWordData, setCachedWordData]);
+
+  // 预加载管理器（单个爬取，后5个单词）
+  const preloadNextWords = useCallback(async (wordQueue: string[], currentIndex: number): Promise<void> => {
+    if (isPreloading.current) return;
+
+    isPreloading.current = true;
+
+    try {
+      // 清空当前队列
+      preloadQueue.current = [];
+
+      // 添加后面5个单词到预加载队列
+      for (let i = 1; i <= 5; i++) {
+        const nextIndex = currentIndex + i;
+        if (nextIndex < wordQueue.length) {
+          const wordText = wordQueue[nextIndex];
+
+          // 如果没有缓存，添加到预加载队列
+          if (!isCacheValid(wordText)) {
+            preloadQueue.current.push({
+              wordText,
+              priority: i, // 越近的单词优先级越高
+              retryCount: 0
+            });
+          }
+        }
+      }
+
+      // 按优先级排序
+      preloadQueue.current.sort((a, b) => a.priority - b.priority);
+
+      // 逐个处理预加载任务
+      while (preloadQueue.current.length > 0) {
+        const task = preloadQueue.current.shift();
+        if (!task) continue;
+
+        try {
+          // 检查是否已经有缓存了
+          if (isCacheValid(task.wordText)) {
+            continue;
+          }
+
+          // 获取单词数据
+          await fetchWordDataInternal(task.wordText);
+
+          // 添加小延迟避免请求过于频繁
+          await new Promise(resolve => setTimeout(resolve, 200));
+
+        } catch (error) {
+          console.error(`预加载失败: ${task.wordText}`, error);
+
+          // 重试机制：最多重试2次
+          if (task.retryCount < 2) {
+            task.retryCount++;
+            task.priority += 10; // 降低重试优先级
+            preloadQueue.current.push(task);
+          }
+        }
+      }
+    } finally {
+      isPreloading.current = false;
+    }
+  }, [fetchWordDataInternal, isCacheValid]);
+
+  // 触发预加载（异步，不阻塞当前流程）
+  const triggerPreload = useCallback((wordQueue: string[], currentIndex: number): void => {
+    // 清理之前的预加载Promise
+    if (preloadPromise.current) {
+      preloadPromise.current = null;
+    }
+
+    // 启动新的预加载
+    preloadPromise.current = preloadNextWords(wordQueue, currentIndex).catch(error => {
+      console.error('预加载过程出错:', error);
+    });
+  }, [preloadNextWords]);
+
   // 获取待复习的单词
   const fetchDueWords = useCallback(async (wordlistId?: number, limit: number = 50, isNewMode: boolean = false): Promise<DueWordsResponse | null> => {
     setIsLoading(true);
@@ -115,18 +269,24 @@ export function useLearning() {
         // 测试模式：获取词书中的所有单词
         const response = await authFetch(`/api/wordlists/${wordlistId}`);
         const data = await response.json();
-        
+
         if (data.success) {
           const words = data.wordlist.words.map((word: any) => word.wordText);
+          const shuffledWords = shuffleArray(words);
+
           setLearningState({
             sessionType,
-            wordQueue: shuffleArray(words),
+            wordQueue: shuffledWords,
             currentWordText: null,
             currentWordData: null,
             currentIndex: 0,
             status: 'active',
             wordlistId
           });
+
+          // 触发预加载前几个单词
+          triggerPreload(shuffledWords, 0);
+
           return true;
         } else {
           setError(data.error || 'Failed to fetch wordlist');
@@ -169,14 +329,14 @@ export function useLearning() {
         if (data && data.success && data.words.length > 0) {
           // 确保立即设置第一个单词
           const firstWord = data.words[0] || null;
-          
+
           if (sessionType === 'new') {
             // 新学习模式：优先选择复习阶段为0的单词
             const response = await authFetch('/api/review/due', {
               method: 'POST',
               body: JSON.stringify({ wordlistId })
             });
-            
+
             const stats = await response.json();
             if (stats.success) {
               // 这里可以进一步筛选，但现在先使用所有待复习单词
@@ -190,6 +350,10 @@ export function useLearning() {
                 wordlistId
               });
               setIsLoading(false); // 确保清除加载状态
+
+              // 触发预加载前几个单词
+              triggerPreload(data.words, 0);
+
               return true;
             } else {
               setError('Failed to get learning stats');
@@ -208,6 +372,10 @@ export function useLearning() {
               wordlistId
             });
             setIsLoading(false); // 确保清除加载状态
+
+            // 触发预加载前几个单词
+            triggerPreload(data.words, 0);
+
             return true;
           }
         } else {
@@ -241,6 +409,10 @@ export function useLearning() {
                     wordlistId
                   });
                   setIsLoading(false); // 确保清除加载状态
+
+                  // 触发预加载前几个单词
+                  triggerPreload(data.words, 0);
+
                   return true;
                 } else {
                   setError('初始化后仍无法获取单词，请刷新页面重试');
@@ -268,35 +440,48 @@ export function useLearning() {
     }
   }, [fetchDueWords]);
 
-  // 加载当前单词数据
+  // 加载当前单词数据（优化版本：从缓存获取）
   const loadCurrentWord = useCallback(async (): Promise<void> => {
     if (!learningState.currentWordText) return;
 
-    setIsLoading(true);
-    setError(null);
-
     try {
-      const response = await authFetch(`/api/dictionary?word=${learningState.currentWordText}&type=all`);
-      const data = await response.json();
+      // 优先从缓存获取数据
+      const cachedData = getCachedWordData(learningState.currentWordText);
 
-      if (data.success && data.data) {
+      if (cachedData) {
+        // 直接使用缓存数据，实现无刷新切换
         setLearningState(prev => ({
           ...prev,
-          currentWordData: data.data
+          currentWordData: cachedData
         }));
       } else {
-        setError('Failed to load word data');
+        // 如果没有缓存，显示加载状态
+        setIsLoading(true);
+        const data = await fetchWordDataInternal(learningState.currentWordText);
+
+        if (data) {
+          setLearningState(prev => ({
+            ...prev,
+            currentWordData: data
+          }));
+        } else {
+          setError('Failed to load word data');
+        }
+        setIsLoading(false);
       }
+
+      // 触发预加载后面5个单词
+      triggerPreload(learningState.wordQueue, learningState.currentIndex);
+
     } catch (err) {
       console.error('Error loading word data:', err);
       setError('Network error while loading word data');
-    } finally {
       setIsLoading(false);
     }
-  }, [learningState.currentWordText]);
+  }, [learningState.currentWordText, learningState.wordQueue, learningState.currentIndex, getCachedWordData, fetchWordDataInternal, triggerPreload]);
 
-  // 进入下一个单词
-  const nextWord = (): boolean => {
+  // 进入下一个单词（优化版本：从缓存获取数据）
+  const nextWord = useCallback((): boolean => {
     if (learningState.currentIndex >= learningState.wordQueue.length - 1) {
       // 已经是最后一个单词
       setLearningState(prev => ({
@@ -309,15 +494,21 @@ export function useLearning() {
     const nextIndex = learningState.currentIndex + 1;
     const nextWordText = learningState.wordQueue[nextIndex];
 
+    // 尝试从缓存获取下一个单词的数据
+    const nextWordData = getCachedWordData(nextWordText);
+
     setLearningState(prev => ({
       ...prev,
       currentIndex: nextIndex,
       currentWordText: nextWordText,
-      currentWordData: null
+      currentWordData: nextWordData // 直接使用缓存数据，如果没有则为null
     }));
 
+    // 触发预加载新的后5个单词
+    triggerPreload(learningState.wordQueue, nextIndex);
+
     return true;
-  };
+  }, [learningState.currentIndex, learningState.wordQueue, getCachedWordData, triggerPreload]);
 
   // 更新单词复习进度
   const updateWordProgress = useCallback(async (wordId: number, isCorrect: boolean = true): Promise<ReviewProgressResponse | null> => {

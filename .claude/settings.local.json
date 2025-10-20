@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(conda:*)",
+      "Bash(call:*)",
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(mkdir:*)",
+      "Bash(mysql:*)",
+      "Bash(net start:*)",
+      "Bash(dir:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(findstr:*)",
+      "Bash(move:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

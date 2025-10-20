@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useLearning } from '@/hooks/useLearning';
 import { WordDisplay } from '@/components/learning/WordDisplay';
 import { InitializingProgress } from '@/components/learning/InitializingProgress';
+import { WordSkeleton } from '@/components/learning/WordSkeleton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowLeft, ArrowRight, Check, X, Home, Settings } from 'lucide-react';
@@ -251,7 +252,7 @@ export default function LearningPage() {
       {/* 主要内容区域 */}
       <main className="flex-1 flex flex-col">
         <div className="flex-1 flex items-center justify-center p-4">
-          {learningState.currentWordText && (
+          {learningState.currentWordText ? (
             <WordDisplay
               wordText={learningState.currentWordText}
               wordDefinition={learningState.currentWordData}
@@ -259,6 +260,14 @@ export default function LearningPage() {
               sentences={learningState.currentWordData?.sentences}
               fontSize={32}
             />
+          ) : learningState.status === 'active' ? (
+            // 正在加载当前单词数据时显示骨架屏
+            <WordSkeleton />
+          ) : (
+            // 空状态
+            <div className="text-center text-gray-500">
+              <p>准备开始学习...</p>
+            </div>
           )}
         </div>
         
@@ -286,7 +295,7 @@ export default function LearningPage() {
             {sessionMode === 'test' ? (
               // 测试模式：显示选项按钮
               <div className="grid grid-cols-2 gap-4">
-                <Button 
+                <Button
                   onClick={() => handleAnswer(false)}
                   variant="outline"
                   className="h-12 text-lg"
@@ -295,8 +304,8 @@ export default function LearningPage() {
                   <X className="h-5 w-5 mr-2" />
                   不认识
                 </Button>
-                
-                <Button 
+
+                <Button
                   onClick={() => handleAnswer(true)}
                   className="h-12 text-lg"
                   disabled={showFeedback}
@@ -308,13 +317,22 @@ export default function LearningPage() {
             ) : (
               // 学习模式：显示下一个按钮
               <div className="flex justify-center">
-                <Button 
+                <Button
                   onClick={() => nextWord()}
                   className="h-12 px-8 text-lg"
-                  disabled={showFeedback}
+                  disabled={showFeedback || isLoading}
                 >
-                  下一个单词
-                  <ArrowRight className="h-5 w-5 ml-2" />
+                  {isLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      加载中...
+                    </>
+                  ) : (
+                    <>
+                      下一个单词
+                      <ArrowRight className="h-5 w-5 ml-2" />
+                    </>
+                  )}
                 </Button>
               </div>
             )}

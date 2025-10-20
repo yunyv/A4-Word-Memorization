@@ -5,40 +5,76 @@ import { WordDisplayProps } from '@/types/learning';
 import { Button } from '@/components/ui/button';
 import { Volume2, Eye, EyeOff } from 'lucide-react';
 
-export function WordDisplay({ 
-  wordText, 
-  wordDefinition, 
-  pronunciationData, 
+export function WordDisplay({
+  wordText,
+  wordDefinition,
+  pronunciationData,
   sentences,
-  onClick, 
-  fontSize = 32 
+  onClick,
+  fontSize = 32
 }: WordDisplayProps) {
   const [showDefinition, setShowDefinition] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [displayWord, setDisplayWord] = useState(wordText);
+  const [displayDefinition, setDisplayDefinition] = useState(wordDefinition);
+  const [displayPronunciation, setDisplayPronunciation] = useState(pronunciationData);
+  const [displaySentences, setDisplaySentences] = useState(sentences);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const previousWordRef = useRef<string | null>(null);
+
+  // 处理单词切换动画
+  useEffect(() => {
+    // 如果单词发生变化，触发过渡动画
+    if (wordText && wordText !== previousWordRef.current) {
+      setIsTransitioning(true);
+
+      // 短暂延迟后更新显示内容
+      setTimeout(() => {
+        setDisplayWord(wordText);
+        setDisplayDefinition(wordDefinition);
+        setDisplayPronunciation(pronunciationData);
+        setDisplaySentences(sentences);
+        setIsTransitioning(false);
+
+        // 如果当前显示着释义，继续保持显示状态
+        if (showDefinition) {
+          setShowDefinition(false);
+        }
+      }, 150);
+
+      previousWordRef.current = wordText;
+    } else if (!isTransitioning) {
+      // 如果没有过渡中，直接更新数据（用于第一次加载）
+      setDisplayWord(wordText);
+      setDisplayDefinition(wordDefinition);
+      setDisplayPronunciation(pronunciationData);
+      setDisplaySentences(sentences);
+    }
+  }, [wordText, wordDefinition, pronunciationData, sentences, showDefinition, isTransitioning]);
 
   // 播放音频
   const playAudio = () => {
-    if (!pronunciationData || (!pronunciationData.american && !pronunciationData.british)) return;
-    
+    if (!displayPronunciation || (!displayPronunciation.american && !displayPronunciation.british)) return;
+
     if (audioRef.current) {
       audioRef.current.pause();
     }
-    
+
     // 优先使用美式发音，如果没有则使用英式发音
-    const audioUrl = pronunciationData.american?.audioUrl || pronunciationData.british?.audioUrl || '';
+    const audioUrl = displayPronunciation.american?.audioUrl || displayPronunciation.british?.audioUrl || '';
     if (!audioUrl) return;
-    
+
     const audio = new Audio(audioUrl);
     audioRef.current = audio;
-    
+
     audio.addEventListener('playing', () => setIsPlaying(true));
     audio.addEventListener('ended', () => setIsPlaying(false));
     audio.addEventListener('error', () => {
       console.error('Error playing audio');
       setIsPlaying(false);
     });
-    
+
     audio.play().catch(error => {
       console.error('Error playing audio:', error);
       setIsPlaying(false);
@@ -74,27 +110,27 @@ export function WordDisplay({
   return (
     <div className="flex flex-col items-center justify-center h-full p-8">
       {/* 隐藏的音频元素 */}
-      {pronunciationData && (pronunciationData.american || pronunciationData.british) && (
+      {displayPronunciation && (displayPronunciation.american || displayPronunciation.british) && (
         <audio ref={audioRef} preload="none" />
       )}
-      
+
       {/* 单词显示区域 */}
-      <div 
-        className="cursor-pointer select-none transition-all duration-300 hover:scale-105"
+      <div
+        className={`cursor-pointer select-none transition-all duration-300 hover:scale-105 ${isTransitioning ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}
         onClick={handleClick}
-        style={{ fontSize: `${fontSize}px` }} // 保留这个动态样式，因为它依赖于用户设置
+        style={{ fontSize: `${fontSize}px` }}
       >
         <h1 className="font-bold text-gray-900 text-center mb-4">
-          {wordText}
+          {displayWord || ''}
         </h1>
-        
+
         {/* 音标和发音按钮 */}
-        {pronunciationData && (
+        {displayPronunciation && (
           <div className="flex items-center justify-center gap-2 mb-4">
             <span className="text-lg text-gray-600">
-              [{formatPhonetic(pronunciationData.american?.phonetic || pronunciationData.british?.phonetic || '')}]
+              [{formatPhonetic(displayPronunciation.american?.phonetic || displayPronunciation.british?.phonetic || '')}]
             </span>
-            
+
             <Button
               variant="ghost"
               size="sm"
@@ -112,28 +148,30 @@ export function WordDisplay({
       </div>
       
       {/* 释义显示/隐藏切换按钮 */}
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={(e) => {
-          e.stopPropagation();
-          setShowDefinition(!showDefinition);
-        }}
-        className="mb-4 flex items-center gap-2"
-      >
-        {showDefinition ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-        {showDefinition ? '隐藏释义' : '显示释义'}
-      </Button>
-      
+      {!isTransitioning && displayWord && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowDefinition(!showDefinition);
+          }}
+          className="mb-4 flex items-center gap-2"
+        >
+          {showDefinition ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          {showDefinition ? '隐藏释义' : '显示释义'}
+        </Button>
+      )}
+
       {/* 释义内容 */}
-      {showDefinition && wordDefinition && (
-        <div className="w-full max-w-2xl bg-white rounded-lg shadow-lg p-6 border">
+      {showDefinition && displayDefinition && (
+        <div className={`w-full max-w-2xl bg-white rounded-lg shadow-lg p-6 border transition-all duration-300 ${isTransitioning ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
           {/* 基本释义 */}
-          {wordDefinition.definitions && wordDefinition.definitions.basic && wordDefinition.definitions.basic.length > 0 && (
+          {displayDefinition.definitions && displayDefinition.definitions.basic && displayDefinition.definitions.basic.length > 0 && (
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">基本释义</h3>
               <ul className="space-y-1">
-                {wordDefinition.definitions.basic.map((def: any, index: number) => (
+                {displayDefinition.definitions.basic.map((def: any, index: number) => (
                   <li key={index} className="text-gray-700">
                     <span className="font-medium">{def.partOfSpeech}</span> {def.meaning}
                   </li>
@@ -143,11 +181,11 @@ export function WordDisplay({
           )}
           
           {/* 网络释义 */}
-          {wordDefinition.definitions && wordDefinition.definitions.web && wordDefinition.definitions.web.length > 0 && (
+          {displayDefinition.definitions && displayDefinition.definitions.web && displayDefinition.definitions.web.length > 0 && (
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">网络释义</h3>
               <ul className="space-y-1">
-                {wordDefinition.definitions.web.map((def: any, index: number) => (
+                {displayDefinition.definitions.web.map((def: any, index: number) => (
                   <li key={index} className="text-gray-700">
                     {def.meaning}
                   </li>
@@ -155,12 +193,12 @@ export function WordDisplay({
               </ul>
             </div>
           )}
-          
+
           {/* 权威英汉释义 */}
-          {wordDefinition.authoritativeDefinitions && wordDefinition.authoritativeDefinitions.length > 0 && (
+          {displayDefinition.authoritativeDefinitions && displayDefinition.authoritativeDefinitions.length > 0 && (
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">权威英汉释义</h3>
-              {wordDefinition.authoritativeDefinitions.map((authDef: any, index: number) => (
+              {displayDefinition.authoritativeDefinitions.map((authDef: any, index: number) => (
                 <div key={index} className="mb-3">
                   <p className="font-medium text-gray-800">{authDef.partOfSpeech}</p>
                   <ul className="space-y-1 ml-4">
@@ -172,7 +210,7 @@ export function WordDisplay({
                       </li>
                     ))}
                   </ul>
-                  
+
                   {/* 习语 */}
                   {authDef.idioms && authDef.idioms.length > 0 && (
                     <div className="mt-2 ml-4">
@@ -190,12 +228,12 @@ export function WordDisplay({
               ))}
             </div>
           )}
-          
+
           {/* 英汉释义 */}
-          {wordDefinition.bilingualDefinitions && wordDefinition.bilingualDefinitions.length > 0 && (
+          {displayDefinition.bilingualDefinitions && displayDefinition.bilingualDefinitions.length > 0 && (
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">英汉释义</h3>
-              {wordDefinition.bilingualDefinitions.map((bilDef: any, index: number) => (
+              {displayDefinition.bilingualDefinitions.map((bilDef: any, index: number) => (
                 <div key={index} className="mb-3">
                   <p className="font-medium text-gray-800">{bilDef.partOfSpeech}</p>
                   <ul className="space-y-1 ml-4">
@@ -210,12 +248,12 @@ export function WordDisplay({
               ))}
             </div>
           )}
-          
+
           {/* 英英释义 */}
-          {wordDefinition.englishDefinitions && wordDefinition.englishDefinitions.length > 0 && (
+          {displayDefinition.englishDefinitions && displayDefinition.englishDefinitions.length > 0 && (
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">英英释义</h3>
-              {wordDefinition.englishDefinitions.map((engDef: any, index: number) => (
+              {displayDefinition.englishDefinitions.map((engDef: any, index: number) => (
                 <div key={index} className="mb-3">
                   <p className="font-medium text-gray-800">{engDef.partOfSpeech}</p>
                   <ul className="space-y-1 ml-4">
@@ -230,13 +268,13 @@ export function WordDisplay({
               ))}
             </div>
           )}
-          
+
           {/* 词形变化 */}
-          {wordDefinition.wordForms && wordDefinition.wordForms.length > 0 && (
+          {displayDefinition.wordForms && displayDefinition.wordForms.length > 0 && (
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">词形变化</h3>
               <div className="flex flex-wrap gap-2">
-                {wordDefinition.wordForms.map((form: any, index: number) => (
+                {displayDefinition.wordForms.map((form: any, index: number) => (
                   <span key={index} className="bg-gray-100 px-2 py-1 rounded text-sm">
                     {form.form}: {form.word}
                   </span>
@@ -244,13 +282,13 @@ export function WordDisplay({
               </div>
             </div>
           )}
-          
+
           {/* 例句 */}
-          {sentences && sentences.length > 0 && (
+          {displaySentences && displaySentences.length > 0 && (
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">例句</h3>
               <ul className="space-y-3">
-                {sentences.slice(0, 3).map((sentence: any, index: number) => (
+                {displaySentences.slice(0, 3).map((sentence: any, index: number) => (
                   <li key={index} className="text-gray-700 border-l-2 border-blue-200 pl-3">
                     <p className="italic">{sentence.english}</p>
                     {sentence.chinese && (
