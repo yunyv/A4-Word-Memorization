@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useLearning } from '@/hooks/useLearning';
 import { useDefinitionSettings } from '@/hooks/useDefinitionSettings';
 import { Button } from '@/components/ui/button';
-import { Settings, Maximize2, Volume2, Shuffle } from 'lucide-react';
+import { Settings, Maximize2, Volume2, Shuffle, X, LogOut } from 'lucide-react';
 import { authFetch } from '@/hooks/useAuth';
 import { DefinitionSettingsButton } from '@/components/learning/DefinitionSettingsButton';
 import { DefinitionSettingsModal } from '@/components/learning/DefinitionSettingsModal';
@@ -358,6 +358,7 @@ export default function FocusLearningPage() {
   const [wordCards, setWordCards] = useState<WordCard[]>([]);
   const [definitionPanel, setDefinitionPanel] = useState<DefinitionPanel | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isExitModalOpen, setIsExitModalOpen] = useState(false);
   
   // 设置释义面板
   const setDefinitionPanelWithLogging = useCallback((newPanel: DefinitionPanel | null) => {
@@ -963,7 +964,7 @@ export default function FocusLearningPage() {
     if (learningState.currentWordText && !isTransitioning) {
       // 检查是否已经添加过这个单词
       const wordAlreadyAdded = wordCards.some(card => card.text === learningState.currentWordText);
-      
+
       if (!wordAlreadyAdded) {
         // 直接使用已有的单词数据，不再调用API
         addNewWordCard(
@@ -974,6 +975,18 @@ export default function FocusLearningPage() {
       }
     }
   }, [learningState.currentWordText, isTransitioning, wordCards, addNewWordCard]);
+
+  // 当学习完成时，自动显示完成提示
+  useEffect(() => {
+    if (learningState.status === 'finished' && !isExitModalOpen) {
+      // 延迟显示完成提示，让用户看到最后一个单词
+      const timer = setTimeout(() => {
+        setIsExitModalOpen(true);
+      }, 1000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [learningState.status, isExitModalOpen]);
 
   // 当单词数据加载完成后，更新对应的卡片
   useEffect(() => {
@@ -991,6 +1004,11 @@ export default function FocusLearningPage() {
       );
     }
   }, [learningState.currentWordData, learningState.currentWordText]);
+
+  // 处理退出学习
+  const handleExitLearning = useCallback(() => {
+    setIsExitModalOpen(true);
+  }, []);
 
   // 处理单词卡片点击
   const handleWordCardClick = useCallback((cardId: string, event?: React.MouseEvent) => {
@@ -1066,7 +1084,7 @@ export default function FocusLearningPage() {
     return () => document.removeEventListener('click', handleOutsideClick);
   }, [handleOutsideClick]);
 
-  // 键盘事件监听 - 只允许使用空格键
+  // 键盘事件监听 - 空格键和ESC键
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.code === 'Space') {
@@ -1083,12 +1101,33 @@ export default function FocusLearningPage() {
           // 没有释义面板时，直接进入下一个单词
           nextWord();
         }
+      } else if (event.code === 'Escape') {
+        event.preventDefault();
+        // ESC键触发退出确认
+        handleExitLearning();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [definitionPanel, nextWord, stopAutoAudio]);
+  }, [definitionPanel, nextWord, stopAutoAudio, handleExitLearning]);
+
+  // 处理返回仪表盘
+  const handleBackToDashboard = useCallback(() => {
+    endLearningSession();
+    router.push('/dashboard');
+  }, [endLearningSession, router]);
+
+  // 确认退出学习
+  const confirmExitLearning = useCallback(() => {
+    endLearningSession();
+    router.push('/dashboard');
+  }, [endLearningSession, router]);
+
+  // 取消退出学习
+  const cancelExitLearning = useCallback(() => {
+    setIsExitModalOpen(false);
+  }, []);
 
   // 清理音频资源
   useEffect(() => {
@@ -1097,10 +1136,21 @@ export default function FocusLearningPage() {
     };
   }, [stopAutoAudio]);
 
-  // 处理返回仪表盘
-  const handleBackToDashboard = () => {
-    endLearningSession();
-    router.push('/dashboard');
+  // 计算学习统计信息
+  const getLearningStats = () => {
+    const totalWords = learningState.wordQueue.length;
+    const currentIndex = learningState.currentIndex;
+    const completedWords = learningState.status === 'finished'
+      ? totalWords
+      : currentIndex;
+
+    return {
+      totalWords,
+      completedWords,
+      remainingWords: Math.max(0, totalWords - completedWords),
+      mode: sessionMode === 'new' ? '新词学习' :
+            sessionMode === 'review' ? '复习模式' : '测试模式'
+    };
   };
 
   // 处理设置
@@ -1629,6 +1679,38 @@ export default function FocusLearningPage() {
         >
           <Maximize2 className="h-5 w-5" />
         </Button>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleExitLearning}
+          title="退出学习 (ESC)"
+          style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: '50%',
+            backgroundColor: learningState.status === 'finished'
+              ? '#FF6B6B'
+              : 'rgba(255, 107, 107, 0.1)',
+            border: learningState.status === 'finished'
+              ? '2px solid #FF6B6B'
+              : '1px solid rgba(255, 107, 107, 0.3)',
+            color: learningState.status === 'finished'
+              ? 'white'
+              : '#FF6B6B',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            animation: learningState.status === 'finished'
+              ? 'pulse 2s infinite'
+              : 'none',
+            boxShadow: learningState.status === 'finished'
+              ? '0 4px 15px rgba(255, 107, 107, 0.4)'
+              : 'none'
+          }}
+        >
+          <LogOut className="h-5 w-5" />
+        </Button>
       </div>
       
       {/* 释义设置模态框 */}
@@ -1641,9 +1723,218 @@ export default function FocusLearningPage() {
         onUpdateUISettings={updateUI}
         onReset={reset}
       />
+
+      {/* 退出学习确认对话框 */}
+      {isExitModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000
+          }}
+          onClick={cancelExitLearning}
+        >
+          <div
+            style={{
+              backgroundColor: 'var(--color-pure-white)',
+              borderRadius: '16px',
+              padding: '32px',
+              maxWidth: '400px',
+              width: '90%',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              fontFamily: "'Inter', 'Source Han Sans CN', sans-serif",
+              animation: 'modalFadeIn 0.2s ease-out'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              marginBottom: '16px'
+            }}>
+              <div style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: '16px'
+              }}>
+                <LogOut style={{ width: '24px', height: '24px', color: '#FF6B6B' }} />
+              </div>
+              <div>
+                <h3 style={{
+                  margin: 0,
+                  fontSize: '20px',
+                  fontWeight: '600',
+                  color: 'var(--color-ink-black)'
+                }}>
+                  确认退出学习
+                </h3>
+                <p style={{
+                  margin: '4px 0 0 0',
+                  fontSize: '14px',
+                  color: 'var(--color-rock-gray)'
+                }}>
+                  学习进度将会自动保存
+                </p>
+              </div>
+            </div>
+
+            <div style={{
+              fontSize: '16px',
+              color: 'var(--color-ink-black)',
+              lineHeight: '1.6',
+              marginBottom: '24px'
+            }}>
+              {(() => {
+                const stats = getLearningStats();
+                return learningState.status === 'finished' ? (
+                  <>
+                    <div style={{ marginBottom: '16px' }}>
+                      🎉 恭喜您完成了本次学习！
+                    </div>
+                    <div style={{
+                      backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      color: 'var(--color-ink-black)'
+                    }}>
+                      <div style={{ marginBottom: '4px' }}>
+                        <strong>学习统计</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                        <span>完成单词数：</span>
+                        <span style={{ fontWeight: '600', color: 'var(--color-focus-blue)' }}>
+                          {stats.completedWords} 个
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>学习模式：</span>
+                        <span style={{ fontWeight: '600' }}>
+                          {stats.mode}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: '16px' }}>
+                      是否要返回仪表盘？
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: '12px' }}>
+                      确定要退出当前的学习会话吗？
+                    </div>
+                    <div style={{
+                      backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      color: 'var(--color-ink-black)'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                        <span>已完成：</span>
+                        <span style={{ fontWeight: '600', color: '#FF6B6B' }}>
+                          {stats.completedWords} / {stats.totalWords} 个单词
+                        </span>
+                      </div>
+                      {stats.remainingWords > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>剩余：</span>
+                          <span style={{ fontWeight: '600' }}>
+                            {stats.remainingWords} 个
+                          </span>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>学习模式：</span>
+                        <span style={{ fontWeight: '600' }}>
+                          {stats.mode}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: '12px', fontSize: '14px', color: 'var(--color-rock-gray)' }}>
+                      您的学习进度已自动保存，可以稍后继续。
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              justifyContent: 'flex-end'
+            }}>
+              <Button
+                variant="ghost"
+                onClick={cancelExitLearning}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  color: 'var(--color-rock-gray)',
+                  backgroundColor: 'transparent',
+                  border: '1px solid #E2E8F0'
+                }}
+              >
+                取消
+              </Button>
+              <Button
+                onClick={confirmExitLearning}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  backgroundColor: '#FF6B6B',
+                  color: 'white',
+                  border: 'none'
+                }}
+              >
+                {learningState.status === 'finished' ? '返回仪表盘' : '确认退出'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* 添加动画样式 */}
       <style jsx>{`
+        @keyframes modalFadeIn {
+          0% {
+            opacity: 0;
+            transform: scale(0.95);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+
+        @keyframes pulse {
+          0% {
+            transform: scale(1);
+          }
+          50% {
+            transform: scale(1.1);
+          }
+          100% {
+            transform: scale(1);
+          }
+        }
+
         @keyframes definitionPanelExpand {
           0% {
             opacity: 0;
