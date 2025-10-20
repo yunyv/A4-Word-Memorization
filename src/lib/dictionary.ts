@@ -1196,5 +1196,121 @@ export class DictionaryScraper {
   }
 }
 
+// 数据验证函数，检查释义数据的完整性
+export function validateWordDataCompleteness(data: any): {
+  isComplete: boolean;
+  missingFields: string[];
+  issues: string[];
+} {
+  const missingFields: string[] = [];
+  const issues: string[] = [];
+  
+  // 检查音标数据
+  if (!data.pronunciationData) {
+    missingFields.push('pronunciationData');
+    issues.push('缺少音标数据');
+  } else {
+    if (!data.pronunciationData.american && !data.pronunciationData.british) {
+      missingFields.push('pronunciationData.american/british');
+      issues.push('缺少美式或英式音标');
+    } else {
+      if (data.pronunciationData.american && !data.pronunciationData.american.audioUrl) {
+        missingFields.push('pronunciationData.american.audioUrl');
+        issues.push('缺少美式发音音频URL');
+      }
+      if (data.pronunciationData.british && !data.pronunciationData.british.audioUrl) {
+        missingFields.push('pronunciationData.british.audioUrl');
+        issues.push('缺少英式发音音频URL');
+      }
+    }
+  }
+  
+  // 检查权威英汉释义
+  if (!data.authoritativeDefinitions || data.authoritativeDefinitions.length === 0) {
+    missingFields.push('authoritativeDefinitions');
+    issues.push('缺少权威英汉释义');
+  } else {
+    let hasValidAuthDef = false;
+    for (const authDef of data.authoritativeDefinitions) {
+      if (authDef.definitions && authDef.definitions.length > 0) {
+        hasValidAuthDef = true;
+        break;
+      }
+    }
+    if (!hasValidAuthDef) {
+      missingFields.push('authoritativeDefinitions.definitions');
+      issues.push('权威英汉释义中没有有效的释义条目');
+    }
+  }
+  
+  // 检查英汉释义
+  if (!data.bilingualDefinitions || data.bilingualDefinitions.length === 0) {
+    missingFields.push('bilingualDefinitions');
+    issues.push('缺少英汉释义');
+  } else {
+    let hasValidBilDef = false;
+    for (const bilDef of data.bilingualDefinitions) {
+      if (bilDef.definitions && bilDef.definitions.length > 0) {
+        hasValidBilDef = true;
+        break;
+      }
+    }
+    if (!hasValidBilDef) {
+      missingFields.push('bilingualDefinitions.definitions');
+      issues.push('英汉释义中没有有效的释义条目');
+    }
+  }
+  
+  // 检查英英释义
+  if (!data.englishDefinitions || data.englishDefinitions.length === 0) {
+    missingFields.push('englishDefinitions');
+    issues.push('缺少英英释义');
+  } else {
+    let hasValidEngDef = false;
+    for (const engDef of data.englishDefinitions) {
+      if (engDef.definitions && engDef.definitions.length > 0) {
+        hasValidEngDef = true;
+        break;
+      }
+    }
+    if (!hasValidEngDef) {
+      missingFields.push('englishDefinitions.definitions');
+      issues.push('英英释义中没有有效的释义条目');
+    }
+  }
+  
+  // 检查基本释义（作为后备）
+  if (!data.definitions || !data.definitions.basic || data.definitions.basic.length === 0) {
+    missingFields.push('definitions.basic');
+    issues.push('缺少基本释义');
+  }
+  
+  // 检查例句
+  if (!data.sentences || data.sentences.length === 0) {
+    missingFields.push('sentences');
+    issues.push('缺少例句');
+  }
+  
+  // 如果有至少一种完整的释义类型，且音标数据完整，则认为数据基本完整
+  const hasCompleteDefinitions =
+    (data.authoritativeDefinitions && data.authoritativeDefinitions.length > 0) ||
+    (data.bilingualDefinitions && data.bilingualDefinitions.length > 0) ||
+    (data.englishDefinitions && data.englishDefinitions.length > 0) ||
+    (data.definitions && data.definitions.basic && data.definitions.basic.length > 0);
+  
+  const hasCompletePronunciation =
+    data.pronunciationData &&
+    ((data.pronunciationData.american && data.pronunciationData.american.audioUrl) ||
+     (data.pronunciationData.british && data.pronunciationData.british.audioUrl));
+  
+  const isComplete = hasCompleteDefinitions && hasCompletePronunciation;
+  
+  return {
+    isComplete,
+    missingFields,
+    issues
+  };
+}
+
 // 导出单例实例
 export const dictionaryScraper = new DictionaryScraper();

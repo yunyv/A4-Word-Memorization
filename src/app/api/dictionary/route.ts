@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { dictionaryScraper } from '@/lib/dictionary';
+import { dictionaryScraper, validateWordDataCompleteness } from '@/lib/dictionary';
 import { db } from '@/lib/db';
 
 /**
@@ -60,14 +60,24 @@ export async function GET(request: NextRequest) {
         const wordData = await getWordFromTables(word!.toLowerCase());
         
         if (wordData) {
-          // 如果新表结构中有数据，直接返回
-          console.log(`从新表结构中获取单词: ${word}`);
-          return NextResponse.json({
-            success: true,
-            word: word!,
-            requestedType: type,
-            data: wordData
-          });
+          // 验证数据完整性
+          const validation = validateWordDataCompleteness(wordData);
+          console.log(`单词 ${word} 数据验证结果:`, validation);
+          
+          if (validation.isComplete) {
+            // 如果数据完整，直接返回
+            console.log(`从新表结构中获取完整单词数据: ${word}`);
+            return NextResponse.json({
+              success: true,
+              word: word!,
+              requestedType: type,
+              data: wordData
+            });
+          } else {
+            // 如果数据不完整，记录日志并继续执行爬虫逻辑
+            console.log(`单词 ${word} 数据不完整，缺失字段: ${validation.missingFields.join(', ')}`);
+            console.log(`单词 ${word} 数据问题: ${validation.issues.join(', ')}`);
+          }
         }
         
         // 检查单词是否存在但没有有效数据（空记录）
@@ -76,37 +86,44 @@ export async function GET(request: NextRequest) {
         });
         
         if (existingWord) {
-          console.log(`单词 ${word} 存在但无有效数据，将重新爬取`);
-          // 删除现有空记录，以便重新创建
-          await db.word.delete({
-            where: { id: existingWord.id }
-          });
-        }
-        
-        // 如果新表结构中没有数据，尝试从JSON字段获取
-        const cachedWord = await db.word.findUnique({
-          where: { wordText: word!.toLowerCase() }
-        });
-
-        if (cachedWord && cachedWord.definitionData) {
-          // 如果JSON缓存存在且不为空，返回缓存数据
-          console.log(`从JSON缓存中获取单词: ${word}`);
-          return NextResponse.json({
-            success: true,
-            word: word!,
-            requestedType: type,
-            data: cachedWord.definitionData
-          });
+          // 如果新表结构中没有数据，尝试从JSON字段获取
+          if (existingWord.definitionData) {
+            // 验证JSON缓存数据的完整性
+            const validation = validateWordDataCompleteness(existingWord.definitionData);
+            console.log(`单词 ${word} JSON缓存数据验证结果:`, validation);
+            
+            if (validation.isComplete) {
+              // 如果JSON缓存数据完整，返回缓存数据
+              console.log(`从JSON缓存中获取完整单词数据: ${word}`);
+              return NextResponse.json({
+                success: true,
+                word: word!,
+                requestedType: type,
+                data: existingWord.definitionData
+              });
+            } else {
+              // 如果JSON缓存数据不完整，记录日志并继续执行爬虫逻辑
+              console.log(`单词 ${word} JSON缓存数据不完整，缺失字段: ${validation.missingFields.join(', ')}`);
+              console.log(`单词 ${word} JSON缓存数据问题: ${validation.issues.join(', ')}`);
+            }
+          } else {
+            console.log(`单词 ${word} 存在但无有效数据，将重新爬取`);
+          }
         }
       } catch (dbError) {
         console.error('查询数据库缓存时出错:', dbError);
         // 继续执行爬虫逻辑，不中断请求
       }
 
-      // 如果缓存不存在或为空，执行爬虫
+      // 如果缓存不存在或数据不完整，执行爬虫
+      console.log(`开始爬取单词: ${word}`);
       const result = await dictionaryScraper.scrapeWord(word!, type);
       
       if (result.success && result.data) {
+        // 验证新爬取的数据完整性
+        const validation = validateWordDataCompleteness(result.data);
+        console.log(`新爬取的单词 ${word} 数据验证结果:`, validation);
+        
         // 将爬取结果存储到数据库（同时保存到JSON和新表结构）
         try {
           // 保存到JSON字段（兼容性）
@@ -129,6 +146,15 @@ export async function GET(request: NextRequest) {
         } catch (cacheError) {
           console.error('缓存单词数据时出错:', cacheError);
           // 不影响返回结果，只记录错误
+        }
+        
+        // 如果新爬取的数据仍然不完整，添加警告信息
+        if (!validation.isComplete) {
+          (result.data as any)._incompleteDataWarning = {
+            missingFields: validation.missingFields,
+            issues: validation.issues
+          };
+          console.log(`警告: 新爬取的单词 ${word} 数据仍然不完整`);
         }
         
         return NextResponse.json(result);
