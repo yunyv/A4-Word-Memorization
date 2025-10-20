@@ -371,6 +371,7 @@ export default function FocusLearningPage() {
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [collisionDetected, setCollisionDetected] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const autoPlayAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // 计算卡片尺寸百分比
   const getCardDimensions = useCallback(() => {
@@ -884,6 +885,56 @@ export default function FocusLearningPage() {
     }, 200);
   }, [wordCards, generateRandomPosition]);
 
+  // 自动播放音频函数
+  const playAutoAudio = useCallback((pronunciationData: any) => {
+    if (!settings.uiSettings.autoPlayAudio || !pronunciationData) return;
+
+    // 停止之前的音频
+    if (autoPlayAudioRef.current) {
+      autoPlayAudioRef.current.pause();
+      autoPlayAudioRef.current.currentTime = 0;
+    }
+
+    // 获取音频URL
+    const audioUrl = pronunciationData?.american?.audioUrl ||
+                     pronunciationData?.british?.audioUrl ||
+                     pronunciationData?.audioUrl;
+
+    if (!audioUrl) return;
+
+    try {
+      const audio = new Audio(audioUrl);
+      autoPlayAudioRef.current = audio;
+
+      // 设置循环播放
+      audio.loop = true;
+
+      // 音频结束时重新播放（循环）
+      audio.addEventListener('ended', () => {
+        audio.currentTime = 0;
+        audio.play().catch(error => {
+          console.error('自动播放音频重播失败:', error);
+        });
+      });
+
+      // 播放音频
+      audio.play().catch(error => {
+        console.error('自动播放音频失败:', error);
+      });
+    } catch (error) {
+      console.error('创建音频对象失败:', error);
+    }
+  }, [settings.uiSettings.autoPlayAudio]);
+
+  // 停止自动播放音频
+  const stopAutoAudio = useCallback(() => {
+    if (autoPlayAudioRef.current) {
+      autoPlayAudioRef.current.pause();
+      autoPlayAudioRef.current.currentTime = 0;
+      autoPlayAudioRef.current = null;
+    }
+  }, []);
+
   // 如果用户未认证，重定向到令牌页面
   useEffect(() => {
     if (userState.status === 'idle' || (userState.status === 'error' && !userState.isAuthenticated)) {
@@ -950,12 +1001,14 @@ export default function FocusLearningPage() {
 
     // 如果有展开的释义面板，先关闭
     if (definitionPanel && definitionPanel.wordId !== cardId) {
+      stopAutoAudio();
       setDefinitionPanelWithLogging(null);
       return;
     }
 
     // 如果点击的是已展开的卡片，关闭释义面板
     if (definitionPanel && definitionPanel.wordId === cardId) {
+      stopAutoAudio();
       setDefinitionPanelWithLogging(null);
       return;
     }
@@ -972,7 +1025,12 @@ export default function FocusLearningPage() {
     };
 
     setDefinitionPanelWithLogging(newDefinitionPanel);
-  }, [wordCards, definitionPanel, isTransitioning]);
+
+    // 自动播放音频
+    if (card.pronunciationData) {
+      playAutoAudio(card.pronunciationData);
+    }
+  }, [wordCards, definitionPanel, isTransitioning, playAutoAudio, stopAutoAudio]);
 
   // 处理点击外部区域
   const handleOutsideClick = useCallback((event: MouseEvent) => {
@@ -992,6 +1050,7 @@ export default function FocusLearningPage() {
 
     if (!isClickOnCard && !isClickOnPanel && !isClickOnControls && !isClickInsidePanel && definitionPanel) {
       // 关闭释义面板并添加新单词
+      stopAutoAudio();
       setDefinitionPanelWithLogging(null);
 
       // 移动到下一个单词
@@ -999,7 +1058,7 @@ export default function FocusLearningPage() {
         nextWord();
       }, 300);
     }
-  }, [definitionPanel, nextWord]);
+  }, [definitionPanel, nextWord, stopAutoAudio]);
 
   // 添加点击外部事件监听
   useEffect(() => {
@@ -1015,6 +1074,7 @@ export default function FocusLearningPage() {
 
         // 如果有释义面板，关闭并进入下一个单词
         if (definitionPanel) {
+          stopAutoAudio();
           setDefinitionPanelWithLogging(null);
           setTimeout(() => {
             nextWord();
@@ -1028,7 +1088,14 @@ export default function FocusLearningPage() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [definitionPanel, nextWord]);
+  }, [definitionPanel, nextWord, stopAutoAudio]);
+
+  // 清理音频资源
+  useEffect(() => {
+    return () => {
+      stopAutoAudio();
+    };
+  }, [stopAutoAudio]);
 
   // 处理返回仪表盘
   const handleBackToDashboard = () => {
@@ -1272,7 +1339,7 @@ export default function FocusLearningPage() {
             alignItems: 'center',
             justifyContent: 'center',
             cursor: card.isDragging ? 'move' : 'pointer',
-            fontSize: `${settings.uiSettings.fontSize - 2}px`,
+            fontSize: `${Math.round(settings.uiSettings.cardSize * 0.16)}px`,
             fontWeight: '600',
             color: 'var(--color-ink-black)',
             fontFamily: "'Inter', 'Source Han Sans CN', sans-serif",

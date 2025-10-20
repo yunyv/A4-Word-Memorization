@@ -11,7 +11,10 @@ export function WordDisplay({
   pronunciationData,
   sentences,
   onClick,
-  fontSize = 32
+  fontSize = 32,
+  autoPlayAudio = false,
+  onAutoPlay,
+  onStopAuto
 }: WordDisplayProps) {
   const [showDefinition, setShowDefinition] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -28,6 +31,11 @@ export function WordDisplay({
     // 如果单词发生变化，触发过渡动画
     if (wordText && wordText !== previousWordRef.current) {
       setIsTransitioning(true);
+
+      // 停止自动播放音频
+      if (showDefinition) {
+        onStopAuto?.();
+      }
 
       // 短暂延迟后更新显示内容
       setTimeout(() => {
@@ -51,7 +59,18 @@ export function WordDisplay({
       setDisplayPronunciation(pronunciationData);
       setDisplaySentences(sentences);
     }
-  }, [wordText, wordDefinition, pronunciationData, sentences, showDefinition, isTransitioning]);
+  }, [wordText, wordDefinition, pronunciationData, sentences, showDefinition, isTransitioning, onStopAuto]);
+
+  // 自动播放音频处理
+  useEffect(() => {
+    if (showDefinition && autoPlayAudio && displayPronunciation) {
+      // 显示释义时自动播放音频
+      onAutoPlay?.(displayPronunciation);
+    } else if (!showDefinition) {
+      // 隐藏释义时停止音频
+      onStopAuto?.();
+    }
+  }, [showDefinition, autoPlayAudio, displayPronunciation, onAutoPlay, onStopAuto]);
 
   // 播放音频
   const playAudio = () => {
@@ -97,8 +116,10 @@ export function WordDisplay({
         audioRef.current.pause();
         audioRef.current = null;
       }
+      // 停止自动播放音频
+      onStopAuto?.();
     };
-  }, []);
+  }, [onStopAuto]);
 
   // 格式化音标
   const formatPhonetic = (phonetic: string) => {

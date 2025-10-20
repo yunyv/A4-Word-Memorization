@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useLearning } from '@/hooks/useLearning';
+import { useDefinitionSettings } from '@/hooks/useDefinitionSettings';
 import { WordDisplay } from '@/components/learning/WordDisplay';
 import { InitializingProgress } from '@/components/learning/InitializingProgress';
 import { WordSkeleton } from '@/components/learning/WordSkeleton';
@@ -16,21 +17,88 @@ export default function LearningPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { userState, logout } = useAuth();
-  const { 
-    learningState, 
-    isLoading, 
-    error, 
-    startLearningSession, 
-    nextWord, 
+  const {
+    learningState,
+    isLoading,
+    error,
+    startLearningSession,
+    nextWord,
     updateWordProgress,
-    endLearningSession 
+    endLearningSession
   } = useLearning();
-  
+
+  const {
+    settings
+  } = useDefinitionSettings();
+
   const [showFeedback, setShowFeedback] = useState(false);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [wordId, setWordId] = useState<number | null>(null);
+  const autoPlayAudioRef = useRef<HTMLAudioElement | null>(null);
   const [sessionMode, setSessionMode] = useState<'new' | 'review' | 'test' | null>(null);
   const [wordlistId, setWordlistId] = useState<number | undefined>(undefined);
+
+  // 根据卡片大小计算字体大小
+  const calculateWordFontSize = () => {
+    return Math.round(settings.uiSettings.cardSize * 0.23); // 约23%的比例
+  };
+
+  // 自动播放音频函数
+  const playAutoAudio = useCallback((pronunciationData: any) => {
+    if (!settings.uiSettings.autoPlayAudio || !pronunciationData) return;
+
+    // 停止之前的音频
+    if (autoPlayAudioRef.current) {
+      autoPlayAudioRef.current.pause();
+      autoPlayAudioRef.current.currentTime = 0;
+    }
+
+    // 获取音频URL
+    const audioUrl = pronunciationData?.american?.audioUrl ||
+                     pronunciationData?.british?.audioUrl ||
+                     pronunciationData?.audioUrl;
+
+    if (!audioUrl) return;
+
+    try {
+      const audio = new Audio(audioUrl);
+      autoPlayAudioRef.current = audio;
+
+      // 设置循环播放
+      audio.loop = true;
+
+      // 音频结束时重新播放（循环）
+      audio.addEventListener('ended', () => {
+        audio.currentTime = 0;
+        audio.play().catch(error => {
+          console.error('自动播放音频重播失败:', error);
+        });
+      });
+
+      // 播放音频
+      audio.play().catch(error => {
+        console.error('自动播放音频失败:', error);
+      });
+    } catch (error) {
+      console.error('创建音频对象失败:', error);
+    }
+  }, [settings.uiSettings.autoPlayAudio]);
+
+  // 停止自动播放音频
+  const stopAutoAudio = useCallback(() => {
+    if (autoPlayAudioRef.current) {
+      autoPlayAudioRef.current.pause();
+      autoPlayAudioRef.current.currentTime = 0;
+      autoPlayAudioRef.current = null;
+    }
+  }, []);
+
+  // 清理音频资源
+  useEffect(() => {
+    return () => {
+      stopAutoAudio();
+    };
+  }, [stopAutoAudio]);
 
   // 如果用户未认证，重定向到令牌页面
   useEffect(() => {
@@ -282,7 +350,10 @@ export default function LearningPage() {
               wordDefinition={learningState.currentWordData}
               pronunciationData={learningState.currentWordData?.pronunciationData}
               sentences={learningState.currentWordData?.sentences}
-              fontSize={32}
+              fontSize={calculateWordFontSize()}
+              autoPlayAudio={settings.uiSettings.autoPlayAudio}
+              onAutoPlay={playAutoAudio}
+              onStopAuto={stopAutoAudio}
             />
           ) : learningState.status === 'active' ? (
             // 正在加载当前单词数据时显示骨架屏

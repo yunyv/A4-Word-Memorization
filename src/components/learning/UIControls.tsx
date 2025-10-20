@@ -1,6 +1,7 @@
 import React from 'react';
 import { DefinitionSettings } from '@/types/definitionSettings';
 import { Slider } from '@/components/ui/slider';
+import { ToggleSwitch } from '@/components/ui/toggle-switch';
 
 interface UIControlsProps {
   settings: DefinitionSettings;
@@ -40,7 +41,7 @@ export const UIControls: React.FC<UIControlsProps> = ({
           />
           
           <Slider
-            label="单词卡片大小"
+            label="单词卡片缩放"
             unit="px"
             min={100}
             max={200}
@@ -48,6 +49,21 @@ export const UIControls: React.FC<UIControlsProps> = ({
             value={settings.uiSettings.cardSize}
             onChange={(cardSize) => onChange({ cardSize })}
           />
+
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <div className="text-sm font-medium text-gray-700">
+                自动朗读读音
+              </div>
+              <div className="text-xs text-gray-500">
+                打开释义面板时自动播放单词读音
+              </div>
+            </div>
+            <ToggleSwitch
+              checked={settings.uiSettings.autoPlayAudio}
+              onChange={(autoPlayAudio) => onChange({ autoPlayAudio })}
+            />
+          </div>
         </div>
       </div>
     </div>

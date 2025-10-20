@@ -11,6 +11,7 @@ export interface UISettings {
   fontSize: number; // 字体大小 (12-24px)
   panelWidth: number; // 释义面板宽度 (400-800px)
   cardSize: number; // 单词卡片大小 (100-200px)
+  autoPlayAudio: boolean; // 自动朗读读音
 }
 
 // 完整设置
@@ -31,6 +32,7 @@ export const defaultSettings: DefinitionSettings = {
   uiSettings: {
     fontSize: 16, // 默认16px
     panelWidth: 600, // 默认600px
-    cardSize: 140 // 默认140px
+    cardSize: 140, // 默认140px
+    autoPlayAudio: false // 默认关闭自动朗读
   }
 };

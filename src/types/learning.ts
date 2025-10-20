@@ -98,6 +98,9 @@ export interface WordDisplayProps {
   sentences?: Sentence[];
   onClick?: () => void;
   fontSize?: number;
+  autoPlayAudio?: boolean;
+  onAutoPlay?: (pronunciationData: PronunciationData | any) => void;
+  onStopAuto?: () => void;
 }
 
 // 艾宾浩斯复习间隔配置
