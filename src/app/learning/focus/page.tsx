@@ -280,10 +280,31 @@ export default function FocusLearningPage() {
     }
   }, [learningState.currentWordText, isTransitioning, wordCards, addNewWordCard]);
 
+  // 当单词数据加载完成后，更新对应的卡片
+  useEffect(() => {
+    if (learningState.currentWordData && learningState.currentWordText) {
+      setWordCards(prev =>
+        prev.map(card =>
+          card.text === learningState.currentWordText
+            ? {
+                ...card,
+                definition: learningState.currentWordData,
+                pronunciationData: learningState.currentWordData.pronunciationData
+              }
+            : card
+        )
+      );
+    }
+  }, [learningState.currentWordData, learningState.currentWordText]);
+
   // 处理单词卡片点击
   const handleWordCardClick = useCallback((cardId: string) => {
     const card = wordCards.find(c => c.id === cardId);
     if (!card || isTransitioning) return;
+
+    // 调试日志
+    console.log('点击的卡片:', card);
+    console.log('卡片释义数据:', card.definition);
 
     // 如果有展开的释义面板，先关闭
     if (definitionPanel && definitionPanel.wordId !== cardId) {
@@ -298,7 +319,7 @@ export default function FocusLearningPage() {
     }
 
     // 展开释义面板
-    setDefinitionPanel({
+    const newDefinitionPanel = {
       wordId: cardId,
       wordText: card.text,
       position: card.position,
@@ -306,7 +327,10 @@ export default function FocusLearningPage() {
       pronunciationData: card.pronunciationData,
       isVisible: true,
       sourceCardPosition: card.position
-    });
+    };
+    
+    console.log('即将设置的释义面板数据:', newDefinitionPanel);
+    setDefinitionPanel(newDefinitionPanel);
   }, [wordCards, definitionPanel, isTransitioning]);
 
   // 处理点击外部区域
@@ -321,7 +345,11 @@ export default function FocusLearningPage() {
     const isClickOnPanel = target.closest('.definition-panel');
     const isClickOnControls = target.closest('.corner-controls');
 
-    if (!isClickOnCard && !isClickOnPanel && !isClickOnControls && definitionPanel) {
+    // 添加更多检查，确保不会误关闭释义面板
+    const panelElement = document.querySelector('.definition-panel');
+    const isClickInsidePanel = panelElement && panelElement.contains(target);
+
+    if (!isClickOnCard && !isClickOnPanel && !isClickOnControls && !isClickInsidePanel && definitionPanel) {
       // 关闭释义面板并添加新单词
       setDefinitionPanel(null);
       
@@ -448,7 +476,10 @@ export default function FocusLearningPage() {
             willChange: card.isDragging ? 'transform' : 'auto'
           }}
           onMouseDown={(e) => handleMouseDown(e, card.id)}
-          onClick={() => !card.isDragging && handleWordCardClick(card.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            !card.isDragging && handleWordCardClick(card.id);
+          }}
         >
           {card.text}
           
@@ -502,23 +533,41 @@ export default function FocusLearningPage() {
       
       {/* 释义面板 */}
       {definitionPanel && (
-        <div 
+        <div
           className="definition-panel"
+          onClick={(e) => e.stopPropagation()} // 防止点击事件冒泡
           style={{
             position: 'absolute',
             left: `${definitionPanel.position.x}%`,
             top: `${definitionPanel.position.y}%`,
             transform: 'translate(-50%, -50%)',
-            width: '400px',
+            width: '600px',
+            maxWidth: '80vw',
+            maxHeight: '70vh',
+            overflowY: 'auto',
             backgroundColor: 'var(--color-pure-white)',
             borderRadius: '16px',
-            boxShadow: '0 10px 15px rgba(0, 0, 0, 0.1)',
-            zIndex: 20,
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)',
+            zIndex: 1000, // 提高z-index确保在最上层
             padding: '24px',
             fontFamily: "'Inter', 'Source Han Sans CN', sans-serif",
             animation: 'definitionPanelExpand 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
           }}
         >
+          {/* 调试信息 */}
+          {process.env.NODE_ENV === 'development' && (
+            <div style={{
+              position: 'absolute',
+              top: '5px',
+              right: '5px',
+              fontSize: '10px',
+              color: 'red',
+              backgroundColor: 'rgba(255, 255, 255, 0.8)',
+              padding: '2px'
+            }}>
+              Debug: {definitionPanel.definition ? '有数据' : '无数据'}
+            </div>
+          )}
           {/* 单词标题 */}
           <div style={{
             fontSize: '24px',
@@ -577,6 +626,21 @@ export default function FocusLearningPage() {
             lineHeight: '1.8',
             color: 'var(--color-ink-black)'
           }}>
+            {/* 调试信息 */}
+            {process.env.NODE_ENV === 'development' && (
+              <div style={{
+                fontSize: '12px',
+                color: 'red',
+                marginBottom: '8px',
+                padding: '4px',
+                backgroundColor: '#f0f0f0',
+                borderRadius: '4px'
+              }}>
+                释义数据类型: {typeof definitionPanel.definition}<br/>
+                释义数据: {JSON.stringify(definitionPanel.definition, null, 2).substring(0, 200)}...
+              </div>
+            )}
+            
             {/* 基本释义 */}
             {definitionPanel.definition?.definitions?.basic && definitionPanel.definition.definitions.basic.length > 0 && (
               <div style={{ marginBottom: '16px' }}>
@@ -585,6 +649,32 @@ export default function FocusLearningPage() {
                     <span style={{ fontWeight: '600' }}>{def.partOfSpeech}</span> {def.meaning}
                   </div>
                 ))}
+              </div>
+            )}
+            
+            {/* 如果没有结构化释义，尝试显示原始释义数据 */}
+            {!definitionPanel.definition?.definitions?.basic && definitionPanel.definition && (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontSize: '14px', color: 'var(--color-rock-gray)', marginBottom: '8px' }}>释义:</div>
+                {typeof definitionPanel.definition === 'string' ? (
+                  <div>{definitionPanel.definition}</div>
+                ) : definitionPanel.definition.pronunciation ? (
+                  <div>音标: {definitionPanel.definition.pronunciation}</div>
+                ) : (
+                  <div>释义数据已加载，但格式不匹配</div>
+                )}
+              </div>
+            )}
+            
+            {/* 如果完全没有释义数据，显示提示 */}
+            {!definitionPanel.definition && (
+              <div style={{
+                padding: '16px',
+                textAlign: 'center',
+                color: 'var(--color-rock-gray)',
+                fontStyle: 'italic'
+              }}>
+                释义数据加载中...
               </div>
             )}
             
@@ -691,19 +781,6 @@ export default function FocusLearningPage() {
         </div>
       )}
       
-      {/* 底部提示文字 */}
-      <div style={{
-        position: 'fixed',
-        bottom: '20px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        fontSize: '16px',
-        color: 'var(--color-rock-gray)',
-        zIndex: 25,
-        fontFamily: "'Inter', 'Source Han Sans CN', sans-serif"
-      }}>
-        拖动单词调整位置，点击单词查看释义，点击外部区域继续
-      </div>
       
       {/* 角落控件 */}
       <div className="corner-controls" style={{
