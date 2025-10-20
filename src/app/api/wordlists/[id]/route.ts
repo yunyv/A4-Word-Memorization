@@ -6,7 +6,7 @@ import { DeleteWordlistResponse } from '@/types/wordlist';
 // 删除指定ID的词书
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // 验证用户身份
@@ -18,16 +18,17 @@ export async function DELETE(
     // 确保authResult不是NextResponse
     if (!authResult || typeof authResult !== 'object' || !('id' in authResult)) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Invalid user authentication' 
+        {
+          success: false,
+          error: 'Invalid user authentication'
         },
         { status: 401 }
       );
     }
 
     const user = authResult as { id: number; token: string; createdAt: Date };
-    const wordlistId = parseInt(params.id);
+    const { id } = await params;
+    const wordlistId = parseInt(id);
 
     // 验证词书ID
     if (isNaN(wordlistId)) {
@@ -95,7 +96,7 @@ export async function DELETE(
 // 获取指定词书的详细信息（可选功能）
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // 验证用户身份
@@ -107,16 +108,17 @@ export async function GET(
     // 确保authResult不是NextResponse
     if (!authResult || typeof authResult !== 'object' || !('id' in authResult)) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Invalid user authentication' 
+        {
+          success: false,
+          error: 'Invalid user authentication'
         },
         { status: 401 }
       );
     }
 
     const user = authResult as { id: number; token: string; createdAt: Date };
-    const wordlistId = parseInt(params.id);
+    const { id } = await params;
+    const wordlistId = parseInt(id);
 
     // 验证词书ID
     if (isNaN(wordlistId)) {

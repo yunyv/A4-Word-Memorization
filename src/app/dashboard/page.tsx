@@ -29,15 +29,15 @@ export default function DashboardPage() {
   // 处理开始学习
   const handleStartLearning = (wordlistId: number) => {
     setSelectedWordlistId(wordlistId);
-    router.push(`/learning?wordlistId=${wordlistId}&mode=new`);
+    router.push(`/learning/focus?wordlistId=${wordlistId}&mode=new`);
   };
 
   // 处理开始复习
   const handleStartReview = (wordlistId?: number) => {
     setSelectedWordlistId(wordlistId);
-    const url = wordlistId 
-      ? `/learning?wordlistId=${wordlistId}&mode=review`
-      : '/learning?mode=review';
+    const url = wordlistId
+      ? `/learning/focus?wordlistId=${wordlistId}&mode=review`
+      : '/learning/focus?mode=review';
     router.push(url);
   };
 
@@ -143,9 +143,9 @@ export default function DashboardPage() {
               复习待学单词
             </Button>
             
-            <Button 
+            <Button
               variant="outline"
-              onClick={() => router.push('/learning?mode=new')}
+              onClick={() => router.push('/learning/focus?mode=new')}
               className="flex items-center justify-center gap-2 h-12"
             >
               <div className="w-5 h-5 rounded-full bg-gray-400 opacity-80"></div>

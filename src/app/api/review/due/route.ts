@@ -43,9 +43,9 @@ export async function GET(request: NextRequest) {
     
     // 如果是新学习模式，优先获取复习阶段为0的单词
     if (isNewMode) {
-      // 首先尝试获取复习阶段为0的单词
-      const newWordsCondition = {
-        ...whereCondition,
+      // 首先尝试获取复习阶段为0的单词，不限制nextReviewDate
+      const newWordsCondition: any = {
+        userId: user.id,
         reviewStage: 0
       };
       

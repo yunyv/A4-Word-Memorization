@@ -38,6 +38,12 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --color-sand-50: #F8F5F1;
+  /* A4 Recite 设计系统颜色 */
+  --color-focus-blue: #4A69E2;
+  --color-papyrus-white: #F8F5F1;
+  --color-pure-white: #FFFFFF;
+  --color-ink-black: #1A202C;
+  --color-rock-gray: #718096;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -442,4 +448,157 @@ html {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
+}
+
+/* A4 Recite 专注学习模式样式 */
+.focus-learning-container {
+  background-color: var(--color-papyrus-white);
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+.central-word {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 120px;
+  font-weight: 700;
+  color: var(--color-ink-black);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  z-index: 10;
+}
+
+.central-word:hover {
+  transform: translate(-50%, -50%) scale(1.05);
+}
+
+.scattered-word {
+  position: absolute;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--color-ink-black);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  opacity: 0.8;
+  z-index: 5;
+}
+
+.scattered-word:hover {
+  transform: scale(1.1);
+  opacity: 1;
+  z-index: 15;
+}
+
+.definition-panel {
+  position: absolute;
+  background-color: var(--color-pure-white);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+  max-width: 400px;
+  z-index: 20;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+
+.definition-panel.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.word-transition {
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.corner-controls {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  gap: 12px;
+  z-index: 30;
+}
+
+.corner-control-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: transparent;
+  border: none;
+  color: var(--color-rock-gray);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.corner-control-btn:hover {
+  color: var(--color-ink-black);
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
+.hint-text {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 16px;
+  color: var(--color-rock-gray);
+  z-index: 25;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes moveToPosition {
+  from {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+}
+
+@keyframes wordScatter {
+  0% {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(0.2);
+    opacity: 0.8;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.fade-out {
+  animation: fadeOut 0.3s ease-in-out;
+}
+
+.word-scatter-animation {
+  animation: wordScatter 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }

@@ -6,7 +6,7 @@ import { ReviewProgressRequest, ReviewProgressResponse, EBBINGHAUS_INTERVAL_MAP 
 // 更新单词复习进度
 export async function POST(
   request: NextRequest,
-  { params }: { params: { wordId: string } }
+  { params }: { params: Promise<{ wordId: string }> }
 ) {
   try {
     // 验证用户身份
@@ -18,19 +18,20 @@ export async function POST(
     // 确保authResult不是NextResponse
     if (!authResult || typeof authResult !== 'object' || !('id' in authResult)) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Invalid user authentication' 
+        {
+          success: false,
+          error: 'Invalid user authentication'
         },
         { status: 401 }
       );
     }
 
     const user = authResult as { id: number; token: string; createdAt: Date };
-    const wordId = parseInt(params.wordId);
+    const { wordId } = await params;
+    const wordIdNum = parseInt(wordId);
 
     // 验证单词ID
-    if (isNaN(wordId)) {
+    if (isNaN(wordIdNum)) {
       return NextResponse.json(
         { 
           success: false, 
@@ -49,7 +50,7 @@ export async function POST(
       where: {
         userId_wordId: {
           userId: user.id,
-          wordId: wordId
+          wordId: wordIdNum
         }
       }
     });
@@ -59,7 +60,7 @@ export async function POST(
       userWordProgress = await db.userWordProgress.create({
         data: {
           userId: user.id,
-          wordId: wordId,
+          wordId: wordIdNum,
           reviewStage: 0,
           nextReviewDate: new Date() // 新单词今天就可以复习
         }
@@ -89,7 +90,7 @@ export async function POST(
       where: {
         userId_wordId: {
           userId: user.id,
-          wordId: wordId
+          wordId: wordIdNum
         }
       },
       data: {
@@ -101,7 +102,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      word_id: wordId,
+      word_id: wordIdNum,
       new_review_stage: newReviewStage,
       next_review_date: nextReviewDate.toISOString().split('T')[0] // 只返回日期部分
     } as ReviewProgressResponse);
@@ -121,7 +122,7 @@ export async function POST(
 // 获取单词学习进度
 export async function GET(
   request: NextRequest,
-  { params }: { params: { wordId: string } }
+  { params }: { params: Promise<{ wordId: string }> }
 ) {
   try {
     // 验证用户身份
@@ -133,19 +134,20 @@ export async function GET(
     // 确保authResult不是NextResponse
     if (!authResult || typeof authResult !== 'object' || !('id' in authResult)) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Invalid user authentication' 
+        {
+          success: false,
+          error: 'Invalid user authentication'
         },
         { status: 401 }
       );
     }
 
     const user = authResult as { id: number; token: string; createdAt: Date };
-    const wordId = parseInt(params.wordId);
+    const { wordId } = await params;
+    const wordIdNum = parseInt(wordId);
 
     // 验证单词ID
-    if (isNaN(wordId)) {
+    if (isNaN(wordIdNum)) {
       return NextResponse.json(
         { 
           success: false, 
@@ -160,7 +162,7 @@ export async function GET(
       where: {
         userId_wordId: {
           userId: user.id,
-          wordId: wordId
+          wordId: wordIdNum
         }
       },
       include: {

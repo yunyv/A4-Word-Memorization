@@ -160,12 +160,16 @@ export function useLearning() {
               }
             } else {
               setError('初始化学习进度失败，请重试');
+              setIsLoading(false);
               return false;
             }
           }
         }
         
         if (data && data.success && data.words.length > 0) {
+          // 确保立即设置第一个单词
+          const firstWord = data.words[0] || null;
+          
           if (sessionType === 'new') {
             // 新学习模式：优先选择复习阶段为0的单词
             const response = await authFetch('/api/review/due', {
@@ -179,15 +183,17 @@ export function useLearning() {
               setLearningState({
                 sessionType,
                 wordQueue: data.words,
-                currentWordText: null,
+                currentWordText: firstWord, // 立即设置第一个单词
                 currentWordData: null,
                 currentIndex: 0,
                 status: 'active',
                 wordlistId
               });
+              setIsLoading(false); // 确保清除加载状态
               return true;
             } else {
               setError('Failed to get learning stats');
+              setIsLoading(false);
               return false;
             }
           } else {
@@ -195,12 +201,13 @@ export function useLearning() {
             setLearningState({
               sessionType,
               wordQueue: data.words,
-              currentWordText: null,
+              currentWordText: firstWord, // 立即设置第一个单词
               currentWordData: null,
               currentIndex: 0,
               status: 'active',
               wordlistId
             });
+            setIsLoading(false); // 确保清除加载状态
             return true;
           }
         } else {
@@ -211,11 +218,43 @@ export function useLearning() {
             
             if (wordlistData.success && wordlistData.wordlist.words.length === 0) {
               setError('该词书中没有单词，请先上传单词');
+            } else if (wordlistData.success && wordlistData.wordlist.words.length > 0) {
+              // 词书有单词但没有学习进度，需要初始化
+              setError('检测到词书中有单词但学习进度未初始化，正在自动初始化...');
+              
+              // 调用初始化API
+              const initSuccess = await initializeUserProgress(wordlistId);
+              
+              if (initSuccess) {
+                // 初始化成功，重新获取待复习单词
+                data = await fetchDueWords(wordlistId, limit, isNewMode);
+                
+                if (data && data.success && data.words.length > 0) {
+                  const firstWord = data.words[0] || null;
+                  setLearningState({
+                    sessionType,
+                    wordQueue: data.words,
+                    currentWordText: firstWord, // 立即设置第一个单词
+                    currentWordData: null,
+                    currentIndex: 0,
+                    status: 'active',
+                    wordlistId
+                  });
+                  setIsLoading(false); // 确保清除加载状态
+                  return true;
+                } else {
+                  setError('初始化后仍无法获取单词，请刷新页面重试');
+                  setIsLoading(false);
+                }
+              } else {
+                setError('初始化学习进度失败，请重试');
+              }
             } else {
               setError('没有找到可学习的单词，请稍后再试');
             }
           } else {
             setError('没有找到可学习的单词，请先创建或上传词书');
+            setIsLoading(false);
           }
           return false;
         }

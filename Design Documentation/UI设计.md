@@ -146,35 +146,89 @@
 
 #### **2.3. 专注学习/复习页 (Focus Learning/Review Page)**
 
-**页面目标:** 终极的沉浸式学习环境。在 4K 屏幕上，这意味着单词本身就是整个世界，其他一切都应退居幕后。
+**页面目标:** 模拟A4纸上的背单词体验，提供沉浸式的随机单词学习环境。单词像便利贴一样随机分布在屏幕上，支持拖动调整位置，点击展开释义，创造自然的学习节奏。
 
 **高保真设计稿 (SVG):**
 
 ```svg
 <svg width="1200" height="700" viewBox="0 0 1200 700" xmlns="http://www.w3.org/2000/svg" style="background-color: #F8F5F1; font-family: 'Inter', 'Source Han Sans CN', sans-serif;">
 
-  <!-- The Word -->
-  <text x="600" y="350" font-size="120" font-weight="700" fill="#1A202C" text-anchor="middle">serendipity</text>
+  <!-- Word Cards (Randomly Distributed) -->
+  <!-- Small word cards that have been clicked - some with drag handles -->
+  <g class="word-card" transform="translate(150, 120)" cursor="pointer">
+    <rect width="140" height="48" rx="10" ry="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="70" y="31" text-anchor="middle" font-size="16" font-weight="600" fill="#1A202C">paucity</text>
+    <!-- Drag handle indicator -->
+    <circle cx="125" cy="24" r="3" fill="#A0AEC0" opacity="0.6"/>
+    <circle cx="125" cy="32" r="3" fill="#A0AEC0" opacity="0.6"/>
+  </g>
+  
+  <!-- Dragging state example -->
+  <g class="word-card dragging" transform="translate(850, 200)" cursor="move" opacity="0.8">
+    <rect width="140" height="48" rx="10" ry="10" fill="#FFFFFF" stroke="#4A69E2" stroke-width="2" style="filter: drop-shadow(0 8px 16px rgba(0,0,0,0.15));"/>
+    <text x="70" y="31" text-anchor="middle" font-size="16" font-weight="600" fill="#1A202C">garrulous</text>
+  </g>
+  
+  <g class="word-card" transform="translate(320, 450)" cursor="pointer">
+    <rect width="140" height="48" rx="10" ry="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+    <text x="70" y="31" text-anchor="middle" font-size="16" font-weight="600" fill="#1A202C">alacrity</text>
+    <circle cx="125" cy="24" r="3" fill="#A0AEC0" opacity="0.6"/>
+    <circle cx="125" cy="32" r="3" fill="#A0AEC0" opacity="0.6"/>
+  </g>
 
-  <!-- Definition Panel (Hidden by default, shown on click) -->
-  <!-- This is an example of a clicked state -->
-  <g id="definition-panel" transform="translate(600, 400)">
-    <rect x="-200" y="0" width="400" height="220" rx="16" ry="16" fill="#FFFFFF" style="filter: drop-shadow(0 10px 15px rgba(0,0,0,0.1));"/>
-    <g transform="translate(-170, 40)">
-      <text font-size="20" font-weight="500" fill="#1A202C">/ˌserənˈdɪpəti/</text>
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10 M2 12H0 M24 12h2" stroke="#718096" stroke-width="1.5" fill="none" transform="translate(200, -5) scale(0.8)"/>
+  <!-- Expanded Definition Panel (from clicked word) -->
+  <g id="definition-panel" transform="translate(600, 250)">
+    <rect x="-200" y="0" width="400" height="280" rx="16" ry="16" fill="#FFFFFF" style="filter: drop-shadow(0 10px 15px rgba(0,0,0,0.1));"/>
+    
+    <!-- Word Title -->
+    <text x="0" y="35" text-anchor="middle" font-size="24" font-weight="700" fill="#1A202C">serendipity</text>
+    
+    <!-- Pronunciation -->
+    <g transform="translate(-170, 60)">
+      <text font-size="18" font-weight="500" fill="#1A202C">/ˌserənˈdɪpəti/</text>
+      <circle cx="320" cy="-5" r="10" fill="#F8F5F1" stroke="#718096" stroke-width="1"/>
+      <path d="M315 -5 L317 -8 L319 -5 L317 -2 Z" fill="#718096" stroke="none"/>
+      <path d="M322 -8 L325 -5 L322 -2" stroke="#718096" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
     </g>
-    <rect x="-170" y="70" width="340" height="1" fill="#E2E8F0"/>
-    <foreignObject x="-170" y="85" width="340" height="120">
+    
+    <rect x="-170" y="85" width="340" height="1" fill="#E2E8F0"/>
+    
+    <!-- Enhanced Definition Content -->
+    <foreignObject x="-170" y="100" width="340" height="160">
       <body xmlns="http://www.w3.org/1999/xhtml" style="margin:0; font-family: 'Source Han Sans CN'; font-size: 16px; color: #1A202C; line-height: 1.8;">
-        <b>n.</b> (意外发现或发明新事物的) 运气，机缘巧合 <br/>
-        <span style="color: #718096;">The occurrence and development of events by chance in a happy or beneficial way.</span>
+        <div style="margin-bottom: 12px;">
+          <b>n.</b> (意外发现或发明新事物的) 运气，机缘巧合
+        </div>
+        <div style="color: #718096; margin-bottom: 12px;">
+          The occurrence and development of events by chance in a happy or beneficial way.
+        </div>
+        <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #E2E8F0;">
+          <div style="font-size: 14px; color: #718096; margin-bottom: 8px;">例句：</div>
+          <div style="font-style: italic; color: #1A202C;">
+            The discovery of penicillin was a happy serendipity that saved millions of lives.
+          </div>
+          <div style="color: #718096; margin-top: 4px;">
+            青霉素的发现是一个幸运的意外，拯救了数百万人的生命。
+          </div>
+        </div>
       </body>
     </foreignObject>
   </g>
 
+  <!-- New Word Card (just appeared) -->
+  <g class="word-card" transform="translate(900, 480)" cursor="pointer" style="opacity: 0.9;">
+    <rect width="140" height="48" rx="10" ry="10" fill="#FFFFFF" stroke="#4A69E2" stroke-width="2"/>
+    <text x="70" y="31" text-anchor="middle" font-size="16" font-weight="600" fill="#1A202C">prosaic</text>
+  </g>
+
+  <!-- Collision indication -->
+  <g class="collision-indicator" transform="translate(500, 300)" opacity="0.8">
+    <rect x="-70" y="-24" width="140" height="48" rx="10" ry="10" fill="none" stroke="#FF6B6B" stroke-width="2" stroke-dasharray="5,5"/>
+    <text x="0" y="5" text-anchor="middle" font-size="14" fill="#FF6B6B">禁止放置</text>
+  </g>
+
   <!-- Bottom Controls & Hint -->
-  <text x="600" y="660" font-size="16" fill="#A0AEC0" text-anchor="middle">按 [ 空格键 ] 切换下一个</text>
+  <text x="600" y="660" font-size="16" fill="#A0AEC0" text-anchor="middle">拖动单词调整位置，点击单词查看释义，点击外部区域继续</text>
   <g id="controls" transform="translate(1100, 640)" cursor="pointer" fill="none" stroke="#A0AEC0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
     <circle cx="45" cy="12" r="2.5" transform="translate(20, -1)" fill="#A0AEC0" stroke="none"/>
@@ -183,17 +237,66 @@
 </svg>
 ```
 
-**设计详解 (4K 优化):**
+**设计详解 (A4纸模拟体验 - 增强版):**
 
-1.  **巨大字体:** 核心单词的字号提升至 `120px`，使其成为屏幕上无可争议的视觉中心。这种巨大的尺寸不仅易于阅读，更在心理上强调了其重要性。
-2.  **优雅的释义面板:** 面板尺寸相应增大，内部留白充足，排版优雅。增加了音标旁边的发音图标。使用了 `drop-shadow` 效果，使其从背景中“浮”起来，质感更佳。
-3.  **极度克制:** 整个界面除了这三样东西（单词、释义面板、角落的控件）之外空无一物。这正是 PRD 中 **“绝对专注”** 原则的终极体现。
+1.  **单词卡片设计:**
+    - 小卡片尺寸：140px × 48px，圆角10px
+    - 背景：纯白色，边框：浅灰色 (#E2E8F0)
+    - 字体：16px，字体粗细：600，颜色：墨黑色 (#1A202C)
+    - 悬浮效果：轻微上浮 (translateY(-2px))，边框变为专注蓝 (#4A69E2)
+    - **拖动指示器**：右上角显示两个小圆点，表示可拖动区域
+
+2.  **释义面板设计:**
+    - 展开尺寸：400px × 280px（增加高度以容纳更多内容），圆角16px
+    - 背景：纯白色，阴影：drop-shadow(0 10px 15px rgba(0,0,0,0.1))
+    - 从被点击的单词卡片位置展开，动画流畅自然
+    - **增强内容显示**：完整显示单词、音标、释义、例句（中英文对照）
+
+3.  **拖动功能设计:**
+    - **拖动状态**：拖动时卡片半透明，边框变为专注蓝，阴影加深
+    - **碰撞检测**：拖动到其他卡片位置时显示红色虚线边框和"禁止放置"提示
+    - **边界限制**：卡片不能完全移出屏幕，保留最小可见区域
+    - **磁性吸附**：释放时卡片自动吸附到合适位置
+
+4.  **随机分布算法:**
+    - 单词卡片在屏幕上随机分布，避免重叠
+    - 考虑屏幕边距，确保所有卡片完全可见
+    - 新单词在空白区域出现，创造自然的视觉流动
 
 **交互细节:**
 
-- **单词:** 单击单词，释义面板以缓动动画 (`fade-in` & `transform: translateY(-10px)`) 的形式出现/消失。
-- **空格键:** 按下后，当前单词和释义面板平滑淡出 (`opacity: 0`)，同时新单词在屏幕的另一个随机位置平滑淡入 (`opacity: 1`)。整个过程耗时约 `300ms`，流畅自然。
-- **控件:** 悬浮时图标颜色变为 `#1A202C` (墨黑)，提供反馈。点击设置图标会弹出一个同样风格简约的设置面板。
+- **拖动单词卡片:**
+  - 按住卡片可拖动调整位置
+  - 拖动时有视觉反馈（半透明、边框变色、阴影加深）
+  - 碰撞检测防止重叠，有明确的禁止提示
+  - 释放时自动吸附到合适位置
+
+- **点击单词卡片:** 释义面板从被点击的卡片位置展开，动画时长300ms，使用cubic-bezier缓动
+
+- **点击释义面板外部:** 释义面板收缩回原位置，同时在新的随机位置出现新单词卡片
+
+- **键盘交互:** ESC键关闭释义面板，空格键关闭释义面板并出现新单词
+
+- **动画效果:** 所有交互都有流畅的过渡动画，提升用户体验的精致感
+
+- **多单词共存:** 屏幕上可以同时存在多个已点击的小单词卡片和一个当前展开的释义面板
+
+**技术实现要点:**
+
+1. **拖动实现:**
+   - 使用 `transform: translate()` 进行位置更新，提升性能
+   - 节流鼠标移动事件，避免过度渲染
+   - 实时碰撞检测算法，确保卡片不重叠
+
+2. **数据解析优化:**
+   - 完善JSON数据解析逻辑
+   - 支持多种数据格式和结构
+   - 优雅的错误处理和降级显示
+
+3. **性能优化:**
+   - 使用CSS `will-change` 属性优化动画性能
+   - 合理的状态管理，避免不必要的重渲染
+   - 懒加载释义数据，提升初始加载速度
 
 ---
 
