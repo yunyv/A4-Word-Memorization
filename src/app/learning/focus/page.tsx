@@ -1149,12 +1149,8 @@ export default function FocusLearningPage() {
               </div>
             )}
             
-            {/* 基本释义 - 作为后备显示 */}
-            {!definitionPanel.definition?.authoritativeDefinitions &&
-             !definitionPanel.definition?.bilingualDefinitions &&
-             !definitionPanel.definition?.englishDefinitions &&
-             definitionPanel.definition?.definitions?.basic &&
-             definitionPanel.definition.definitions.basic.length > 0 && (
+            {/* 基本释义 - 始终显示（如果存在） */}
+            {definitionPanel.definition?.definitions?.basic && definitionPanel.definition.definitions.basic.length > 0 && (
               <div style={{ marginBottom: '16px' }}>
                 <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--color-ink-black)', marginBottom: '8px' }}>基本释义</div>
                 {definitionPanel.definition.definitions.basic.map((def: any, index: number) => (
