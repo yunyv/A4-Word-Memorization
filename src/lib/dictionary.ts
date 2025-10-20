@@ -371,20 +371,41 @@ export class DictionaryScraper {
     const definitions: AuthoritativeDefinition[] = [];
     
     try {
-      // 查找权威英汉释义容器
-      const $container = $('#clientnlid');
+      // 查找权威英汉释义容器 - 尝试多种可能的选择器
+      let $container = $('#clientnlid');
+      
       if ($container.length === 0) {
-        console.log('未找到权威英汉释义容器 #clientnlid');
-        return definitions;
+        console.log('未找到权威英汉释义容器 #clientnlid，尝试其他选择器');
+        // 尝试其他可能的选择器
+        $container = $('.client_qula_area');
+        
+        if ($container.length === 0) {
+          console.log('仍未找到权威英汉释义容器');
+          return definitions;
+        }
       }
-
+      
+      console.log(`找到权威英汉释义容器，包含 ${$container.find('.defeachseg').length} 个释义区块`);
+      
       // 遍历每个词性区块
       $container.find('.defeachseg').each((index: number, element: any) => {
         const $seg = $(element);
         const $head = $seg.find('.defeachhead');
-        const partOfSpeech = $head.find('.defpos').text().trim();
+        let partOfSpeech = $head.find('.defpos').text().trim();
         
-        if (!partOfSpeech) return;
+        // 如果没有找到词性，尝试从其他位置获取
+        if (!partOfSpeech) {
+          partOfSpeech = $seg.find('h3').text().trim() ||
+                       $seg.find('.def_pos').text().trim() ||
+                       $seg.find('.client_def_title').text().trim();
+        }
+        
+        console.log(`处理权威英汉释义区块 ${index + 1}: ${partOfSpeech}`);
+        
+        if (!partOfSpeech) {
+          console.log(`未找到词性，跳过释义区块 ${index + 1}`);
+          return;
+        }
         
         const definitionItem: AuthoritativeDefinition = {
           partOfSpeech,
@@ -399,8 +420,16 @@ export class DictionaryScraper {
           const number = parseInt(numberText) || defIndex + 1;
           
           const $defItemCon = $defItem.find('.defitemcon');
-          const chineseMeaning = $defItemCon.find('.itemname').text().trim();
-          const englishMeaning = $defItemCon.find('.itmeval').text().trim();
+          let chineseMeaning = $defItemCon.find('.itemname').text().trim();
+          let englishMeaning = $defItemCon.find('.itmeval').text().trim();
+          
+          // 如果没有找到释义内容，尝试从其他位置获取
+          if (!chineseMeaning && !englishMeaning) {
+            chineseMeaning = $defItemCon.text().trim();
+            englishMeaning = '';
+          }
+          
+          console.log(`提取到权威释义 ${number}: 中文=${chineseMeaning}, 英文=${englishMeaning}`);
           
           if (chineseMeaning || englishMeaning) {
             const definition: any = {
@@ -419,6 +448,7 @@ export class DictionaryScraper {
                 const chinese = $examItem.find('.examitemname').text().trim();
                 if (english || chinese) {
                   examples.push({ english, chinese });
+                  console.log(`提取到例句: ${english} / ${chinese}`);
                 }
               });
               if (examples.length > 0) {
@@ -433,6 +463,7 @@ export class DictionaryScraper {
         // 提取习语
         const $idomBar = $seg.find('.idombar');
         if ($idomBar.length > 0) {
+          console.log(`找到习语区域，包含 ${$idomBar.find('.defitemtitlebar').length} 个习语`);
           const idioms: Array<{ number: number; title: string; meaning: string; examples?: Array<{ english: string; chinese: string }> }> = [];
           $idomBar.find('.defitemtitlebar').each((idiomIndex: number, idiomElement: any) => {
             const $titleBar = $(idiomElement);
@@ -440,13 +471,23 @@ export class DictionaryScraper {
             const number = parseInt(numberText) || idiomIndex + 1;
             const title = $titleBar.find('.itmeval').text().trim();
             
+            console.log(`处理习语 ${number}: ${title}`);
+            
             // 查找对应的释义内容
             const $nextItems = $titleBar.nextUntil('.defitemtitlebar', '.defitembar');
             $nextItems.each((itemIndex: number, itemElement: any) => {
               const $itemBar = $(itemElement);
               const $defItem = $itemBar.find('.defitem');
-              const meaning = $defItem.find('.itemname').text().trim();
-              const englishMeaning = $defItem.find('.itmeval').text().trim();
+              let meaning = $defItem.find('.itemname').text().trim();
+              let englishMeaning = $defItem.find('.itmeval').text().trim();
+              
+              // 如果没有找到释义内容，尝试从其他位置获取
+              if (!meaning && !englishMeaning) {
+                meaning = $defItem.text().trim();
+                englishMeaning = '';
+              }
+              
+              console.log(`提取到习语释义: ${meaning} / ${englishMeaning}`);
               
               if (meaning || englishMeaning) {
                 const idiom: any = {
@@ -465,6 +506,7 @@ export class DictionaryScraper {
                     const chinese = $examItem.find('.examitemname').text().trim();
                     if (english || chinese) {
                       examples.push({ english, chinese });
+                      console.log(`提取到习语例句: ${english} / ${chinese}`);
                     }
                   });
                   if (examples.length > 0) {
@@ -479,11 +521,13 @@ export class DictionaryScraper {
           
           if (idioms.length > 0) {
             definitionItem.idioms = idioms;
+            console.log(`添加 ${idioms.length} 个习语`);
           }
         }
         
         if (definitionItem.definitions.length > 0) {
           definitions.push(definitionItem);
+          console.log(`添加权威英汉释义: ${partOfSpeech}, 包含 ${definitionItem.definitions.length} 个释义`);
         }
       });
       
@@ -491,6 +535,7 @@ export class DictionaryScraper {
       console.error('提取权威英汉释义时出错:', error);
     }
     
+    console.log(`最终提取到 ${definitions.length} 个权威英汉释义`);
     return definitions;
   }
 
@@ -499,43 +544,93 @@ export class DictionaryScraper {
     const definitions: BilingualDefinition[] = [];
     
     try {
-      // 查找英汉释义容器
-      const $container = $('#clientcrossid');
+      // 查找英汉释义容器 - 尝试多种可能的选择器
+      let $container = $('#clientcrossid');
+      
       if ($container.length === 0) {
-        console.log('未找到英汉释义容器 #clientcrossid');
-        return definitions;
+        console.log('未找到英汉释义容器 #clientcrossid，尝试其他选择器');
+        // 尝试其他可能的选择器
+        $container = $('.client_cross_def_area');
+        
+        if ($container.length === 0) {
+          console.log('仍未找到英汉释义容器');
+          return definitions;
+        }
       }
-
+      
+      console.log(`找到英汉释义容器，包含 ${$container.find('.client_def_bar').length} 个释义区块`);
+      
       // 遍历每个词性区块
       $container.find('.client_def_bar').each((index: number, element: any) => {
         const $bar = $(element);
         const $titleBar = $bar.find('.client_def_title_bar');
         const partOfSpeech = $titleBar.find('.client_def_title').text().trim();
         
-        if (!partOfSpeech) return;
+        console.log(`处理英汉释义区块 ${index + 1}: ${partOfSpeech}`);
+        
+        if (!partOfSpeech) {
+          // 如果没有找到词性，尝试从其他位置获取
+          const alternativePos = $bar.find('.client_def_title').text().trim() ||
+                               $bar.find('.def_pos').text().trim() ||
+                               $bar.find('h3').text().trim();
+          
+          if (alternativePos) {
+            console.log(`从替代位置获取到词性: ${alternativePos}`);
+          } else {
+            console.log(`未找到词性，跳过释义区块 ${index + 1}`);
+            return;
+          }
+        }
         
         const definitionItem: BilingualDefinition = {
-          partOfSpeech,
+          partOfSpeech: partOfSpeech || $titleBar.find('.client_def_title').text().trim(),
           definitions: []
         };
         
-        // 提取释义条目
-        $bar.find('.client_def_list_item').each((defIndex: number, defElement: any) => {
-          const $defItem = $(defElement);
-          const numberText = $defItem.find('.client_def_list_word_num').text().trim();
-          const number = parseInt(numberText) || defIndex + 1;
-          const meaning = $defItem.find('.client_def_list_word_bar').text().trim();
-          
-          if (meaning) {
+        // 提取释义条目 - 尝试多种可能的选择器
+        let $defItems = $bar.find('.client_def_list_item');
+        
+        if ($defItems.length === 0) {
+          console.log(`未找到释义条目，尝试其他选择器`);
+          $defItems = $bar.find('.client_def_list_word_bar');
+        }
+        
+        if ($defItems.length === 0) {
+          console.log(`仍未找到释义条目，尝试直接获取文本内容`);
+          // 如果没有找到特定的释义条目，尝试直接获取文本内容
+          const meaningText = $bar.text().trim();
+          if (meaningText && meaningText !== partOfSpeech) {
             definitionItem.definitions.push({
-              number,
-              meaning
+              number: 1,
+              meaning: meaningText.replace(partOfSpeech, '').trim()
             });
+            console.log(`从文本内容提取释义: ${meaningText}`);
           }
-        });
+        } else {
+          $defItems.each((defIndex: number, defElement: any) => {
+            const $defItem = $(defElement);
+            const numberText = $defItem.find('.client_def_list_word_num').text().trim();
+            const number = parseInt(numberText) || defIndex + 1;
+            let meaning = $defItem.find('.client_def_list_word_bar').text().trim();
+            
+            // 如果没有找到释义内容，尝试直接获取元素文本
+            if (!meaning) {
+              meaning = $defItem.text().trim();
+            }
+            
+            if (meaning) {
+              definitionItem.definitions.push({
+                number,
+                meaning
+              });
+              console.log(`提取到释义 ${number}: ${meaning}`);
+            }
+          });
+        }
         
         if (definitionItem.definitions.length > 0) {
           definitions.push(definitionItem);
+          console.log(`添加英汉释义: ${partOfSpeech}, 包含 ${definitionItem.definitions.length} 个释义`);
         }
       });
       
@@ -543,6 +638,7 @@ export class DictionaryScraper {
       console.error('提取英汉释义时出错:', error);
     }
     
+    console.log(`最终提取到 ${definitions.length} 个英汉释义`);
     return definitions;
   }
 
@@ -618,48 +714,107 @@ export class DictionaryScraper {
     const pronunciationData: PronunciationData = {};
     
     try {
-      // 查找发音列表容器
-      const $pronunciationLists = $('.client_def_hd_pn_list');
+      // 查找发音列表容器 - 尝试多种可能的选择器
+      let $pronunciationLists = $('.client_def_hd_pn_list');
       
       if ($pronunciationLists.length === 0) {
-        console.log('未找到发音列表容器 .client_def_hd_pn_list');
+        console.log('未找到发音列表容器 .client_def_hd_pn_list，尝试其他选择器');
+        // 尝试其他可能的选择器
+        $pronunciationLists = $('.client_def_hd_pn');
+        
+        if ($pronunciationLists.length === 0) {
+          console.log('未找到发音列表容器，尝试查找所有可能的发音元素');
+          // 直接查找所有可能的发音元素
+          $pronunciationLists = $('.client_aud_o').parent();
+        }
+      }
+      
+      if ($pronunciationLists.length === 0) {
+        console.log('仍未找到发音列表容器');
         return pronunciationData;
       }
+      
+      console.log(`找到 ${$pronunciationLists.length} 个发音列表容器`);
       
       // 遍历每个发音列表
       $pronunciationLists.each((index: number, element: any) => {
         const $list = $(element);
         const $phoneticElement = $list.find('.client_def_hd_pn');
-        const phoneticText = $phoneticElement.text().trim();
+        let phoneticText = $phoneticElement.text().trim();
+        
+        // 如果没有找到音标文本，尝试从父元素获取
+        if (!phoneticText) {
+          phoneticText = $list.text().trim();
+        }
         
         if (!phoneticText) return;
         
+        console.log(`处理发音文本 ${index + 1}: ${phoneticText}`);
+        
         // 提取音标部分（去掉"美:"或"英:"前缀）
         const phoneticMatch = phoneticText.match(/[^\[\]]+(\[.+\])/);
-        const phonetic = phoneticMatch ? phoneticMatch[1] : '';
+        const phonetic = phoneticMatch ? phoneticMatch[1] : phoneticText;
         
-        // 提取音频URL
+        // 提取音频URL - 尝试多种可能的属性
+        let audioUrl = '';
         const $audioElement = $list.find('.client_aud_o');
-        const audioUrl = $audioElement.attr('data-pronunciation') || '';
+        
+        if ($audioElement.length > 0) {
+          audioUrl = $audioElement.attr('data-pronunciation') ||
+                    $audioElement.attr('data-mp3link') ||
+                    $audioElement.attr('src') || '';
+        }
+        
+        // 如果仍然没有找到音频URL，尝试从列表本身获取
+        if (!audioUrl) {
+          audioUrl = $list.attr('data-pronunciation') ||
+                    $list.attr('data-mp3link') || '';
+        }
         
         // 构建完整的音频URL
-        const fullAudioUrl = audioUrl ? `https://cn.bing.com${audioUrl}` : '';
+        let fullAudioUrl = '';
+        if (audioUrl) {
+          // 如果URL已经是完整的，直接使用
+          if (audioUrl.startsWith('http')) {
+            fullAudioUrl = audioUrl;
+          } else {
+            fullAudioUrl = `https://cn.bing.com${audioUrl}`;
+          }
+        }
+        
+        console.log(`提取到音频URL: ${fullAudioUrl}`);
         
         // 判断是美式发音还是英式发音
-        if (phoneticText.includes('美:')) {
+        if (phoneticText.includes('美:') || phoneticText.includes('美式')) {
           pronunciationData.american = {
             phonetic,
             audioUrl: fullAudioUrl
           };
-        } else if (phoneticText.includes('英:')) {
+          console.log(`添加美式发音: ${phonetic}, ${fullAudioUrl}`);
+        } else if (phoneticText.includes('英:') || phoneticText.includes('英式')) {
           pronunciationData.british = {
             phonetic,
             audioUrl: fullAudioUrl
           };
+          console.log(`添加英式发音: ${phonetic}, ${fullAudioUrl}`);
+        } else if (index === 0 && !pronunciationData.american) {
+          // 如果没有明确标识，第一个默认为美式发音
+          pronunciationData.american = {
+            phonetic,
+            audioUrl: fullAudioUrl
+          };
+          console.log(`默认添加为美式发音: ${phonetic}, ${fullAudioUrl}`);
+        } else if (!pronunciationData.british) {
+          // 第二个默认为英式发音
+          pronunciationData.british = {
+            phonetic,
+            audioUrl: fullAudioUrl
+          };
+          console.log(`默认添加为英式发音: ${phonetic}, ${fullAudioUrl}`);
         }
       });
       
-      console.log('提取的音标数据:', pronunciationData);
+      console.log('最终提取的音标数据:', pronunciationData);
       
     } catch (error) {
       console.error('提取音标和音频数据时出错:', error);

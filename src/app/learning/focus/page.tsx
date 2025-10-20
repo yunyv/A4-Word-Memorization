@@ -87,6 +87,7 @@ interface DefinitionPanel {
   pronunciationData?: any;
   isVisible: boolean;
   sourceCardPosition: { x: number; y: number }; // 源卡片位置
+  isDragging?: boolean; // 是否正在拖动
 }
 
 export default function FocusLearningPage() {
@@ -276,6 +277,7 @@ export default function FocusLearningPage() {
   const [wordlistId, setWordlistId] = useState<number | undefined>(undefined);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [draggedCard, setDraggedCard] = useState<string | null>(null);
+  const [draggedPanel, setDraggedPanel] = useState<boolean>(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [collisionDetected, setCollisionDetected] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -292,11 +294,11 @@ export default function FocusLearningPage() {
       const x = margin + Math.random() * (100 - margin - cardWidth);
       const y = margin + Math.random() * (100 - margin - cardHeight);
       
-      // 检查是否与现有卡片重叠
+      // 检查是否与现有卡片重叠 - 减小判定范围
       const hasOverlap = existingCards.some(card => {
         const dx = Math.abs(card.position.x - x);
         const dy = Math.abs(card.position.y - y);
-        return dx < (cardWidth + 2) && dy < (cardHeight + 2); // 添加一些间距
+        return dx < (cardWidth - 1) && dy < (cardHeight - 1); // 减小重叠判定范围
       });
       
       if (!hasOverlap) {
@@ -312,7 +314,7 @@ export default function FocusLearningPage() {
   }, []);
 
   // 检查两个位置是否重叠
-  const checkOverlap = useCallback((pos1: { x: number; y: number }, pos2: { x: number; y: number }, cardWidth: number, cardHeight: number, margin: number = 2): boolean => {
+  const checkOverlap = useCallback((pos1: { x: number; y: number }, pos2: { x: number; y: number }, cardWidth: number, cardHeight: number, margin: number = 0.5): boolean => {
     const dx = Math.abs(pos1.x - pos2.x);
     const dy = Math.abs(pos1.y - pos2.y);
     return dx < (cardWidth + margin) && dy < (cardHeight + margin);
@@ -327,6 +329,44 @@ export default function FocusLearningPage() {
       if (card.id === cardId) return false;
       return checkOverlap(position, card.position, cardWidth, cardHeight);
     });
+  }, [wordCards, checkOverlap]);
+
+  // 计算碰撞后的弹开位置
+  const calculateBouncePosition = useCallback((cardId: string, newPosition: { x: number; y: number }): { x: number; y: number } => {
+    const cardWidth = 12;
+    const cardHeight = 7;
+    const bounceDistance = 3; // 弹开距离（百分比）
+    
+    // 找到碰撞的卡片
+    const collidingCard = wordCards.find(card => {
+      if (card.id === cardId) return false;
+      return checkOverlap(newPosition, card.position, cardWidth, cardHeight);
+    });
+    
+    if (!collidingCard) return newPosition;
+    
+    // 计算弹开方向
+    const dx = newPosition.x - collidingCard.position.x;
+    const dy = newPosition.y - collidingCard.position.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (distance === 0) {
+      // 如果完全重叠，随机选择一个方向
+      const angle = Math.random() * Math.PI * 2;
+      return {
+        x: collidingCard.position.x + Math.cos(angle) * bounceDistance,
+        y: collidingCard.position.y + Math.sin(angle) * bounceDistance
+      };
+    }
+    
+    // 标准化方向向量并应用弹开距离
+    const normalizedDx = dx / distance;
+    const normalizedDy = dy / distance;
+    
+    return {
+      x: collidingCard.position.x + normalizedDx * bounceDistance,
+      y: collidingCard.position.y + normalizedDy * bounceDistance
+    };
   }, [wordCards, checkOverlap]);
 
   // 检查位置是否在屏幕边界内
@@ -345,15 +385,6 @@ export default function FocusLearningPage() {
   const handleMouseDown = useCallback((e: React.MouseEvent, cardId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    // 如果有展开的释义面板，先关闭
-    if (definitionPanel) {
-      logEvent('PANEL_CLOSE', 'handleMouseDown', {
-        reason: 'dragging_started',
-        panelId: definitionPanel.wordId
-      });
-      setDefinitionPanelWithLogging(null);
-    }
     
     const card = wordCards.find(c => c.id === cardId);
     if (!card) return;
@@ -383,11 +414,41 @@ export default function FocusLearningPage() {
         card.id === cardId ? { ...card, isDragging: true } : card
       )
     );
-  }, [wordCards, definitionPanel]);
+  }, [wordCards]);
+
+  // 处理释义面板鼠标按下事件（开始拖动）
+  const handlePanelMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!definitionPanel || !containerRef.current) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const containerRect = containerRef.current.getBoundingClientRect();
+    
+    // 计算鼠标相对于面板中心的偏移量（百分比）
+    const panelCenterX = ((rect.left + rect.width / 2) - containerRect.left) / containerRect.width * 100;
+    const panelCenterY = ((rect.top + rect.height / 2) - containerRect.top) / containerRect.height * 100;
+    const mouseX = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+    const mouseY = ((e.clientY - containerRect.top) / containerRect.height) * 100;
+    
+    setDragOffset({
+      x: mouseX - panelCenterX,
+      y: mouseY - panelCenterY
+    });
+    
+    setDraggedPanel(true);
+    
+    // 设置面板为拖动状态
+    setDefinitionPanelWithLogging({
+      ...definitionPanel,
+      isDragging: true
+    });
+  }, [definitionPanel, setDefinitionPanelWithLogging]);
 
   // 处理鼠标移动事件（拖动中）
   const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!draggedCard || !containerRef.current) return;
+    if (!containerRef.current) return;
     
     const containerRect = containerRef.current.getBoundingClientRect();
     
@@ -395,47 +456,83 @@ export default function FocusLearningPage() {
     const mouseX = ((e.clientX - containerRect.left) / containerRect.width) * 100;
     const mouseY = ((e.clientY - containerRect.top) / containerRect.height) * 100;
     
-    // 计算新位置（考虑偏移量）
-    const newPosition = {
-      x: mouseX - dragOffset.x,
-      y: mouseY - dragOffset.y
-    };
-    
-    // 检查边界
-    const boundedPosition = checkPositionInBounds(newPosition);
-    
-    // 检查碰撞
-    const hasCollision = checkCollisionWithOtherCards(draggedCard, boundedPosition);
-    setCollisionDetected(hasCollision);
-    
-    // 如果没有碰撞，更新位置
-    if (!hasCollision) {
+    if (draggedCard) {
+      // 处理单词卡片拖动
+      // 计算新位置（考虑偏移量）
+      const newPosition = {
+        x: mouseX - dragOffset.x,
+        y: mouseY - dragOffset.y
+      };
+      
+      // 检查边界
+      const boundedPosition = checkPositionInBounds(newPosition);
+      
+      // 检查碰撞
+      const hasCollision = checkCollisionWithOtherCards(draggedCard, boundedPosition);
+      setCollisionDetected(hasCollision);
+      
+      // 如果有碰撞，计算弹开位置
+      const finalPosition = hasCollision ? calculateBouncePosition(draggedCard, boundedPosition) : boundedPosition;
+      
+      // 更新位置
       setWordCards(prev =>
         prev.map(card =>
-          card.id === draggedCard ? { ...card, position: boundedPosition } : card
+          card.id === draggedCard ? { ...card, position: finalPosition } : card
         )
       );
+    } else if (draggedPanel && definitionPanel) {
+      // 处理释义面板拖动
+      // 计算新位置（考虑偏移量）
+      const newPosition = {
+        x: mouseX - dragOffset.x,
+        y: mouseY - dragOffset.y
+      };
+      
+      // 面板边界检查（面板较大，需要特殊处理）
+      const panelWidthPercent = 50; // 面板宽度百分比
+      const panelHeightPercent = 70; // 面板高度百分比
+      
+      const boundedX = Math.max(panelWidthPercent / 2, Math.min(100 - panelWidthPercent / 2, newPosition.x));
+      const boundedY = Math.max(panelHeightPercent / 2, Math.min(100 - panelHeightPercent / 2, newPosition.y));
+      
+      const boundedPosition = { x: boundedX, y: boundedY };
+      
+      // 更新面板位置
+      setDefinitionPanelWithLogging({
+        ...definitionPanel,
+        position: boundedPosition
+      });
     }
-  }, [draggedCard, dragOffset, checkPositionInBounds, checkCollisionWithOtherCards]);
+  }, [draggedCard, draggedPanel, definitionPanel, dragOffset, checkPositionInBounds, checkCollisionWithOtherCards, calculateBouncePosition, setDefinitionPanelWithLogging]);
 
   // 处理鼠标释放事件（结束拖动）
   const handleMouseUp = useCallback(() => {
-    if (!draggedCard) return;
+    if (draggedCard) {
+      // 移除卡片拖动状态
+      setWordCards(prev =>
+        prev.map(card =>
+          card.id === draggedCard ? { ...card, isDragging: false } : card
+        )
+      );
+      
+      setDraggedCard(null);
+      setCollisionDetected(false);
+    }
     
-    // 移除拖动状态
-    setWordCards(prev =>
-      prev.map(card =>
-        card.id === draggedCard ? { ...card, isDragging: false } : card
-      )
-    );
-    
-    setDraggedCard(null);
-    setCollisionDetected(false);
-  }, [draggedCard]);
+    if (draggedPanel && definitionPanel) {
+      // 移除面板拖动状态
+      setDefinitionPanelWithLogging({
+        ...definitionPanel,
+        isDragging: false
+      });
+      
+      setDraggedPanel(false);
+    }
+  }, [draggedCard, draggedPanel, definitionPanel, setDefinitionPanelWithLogging]);
 
   // 添加全局鼠标事件监听
   useEffect(() => {
-    if (draggedCard) {
+    if (draggedCard || draggedPanel) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
       
@@ -444,7 +541,7 @@ export default function FocusLearningPage() {
         document.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [draggedCard, handleMouseMove, handleMouseUp]);
+  }, [draggedCard, draggedPanel, handleMouseMove, handleMouseUp]);
 
   // 添加新单词卡片
   const addNewWordCard = useCallback((wordText: string, definition?: any, pronunciationData?: any) => {
@@ -851,6 +948,7 @@ export default function FocusLearningPage() {
               action: 'panel_mousedown',
               panelId: definitionPanel.wordId
             });
+            handlePanelMouseDown(e);
           }}
           style={{
             position: 'absolute',
@@ -863,7 +961,7 @@ export default function FocusLearningPage() {
             overflowY: 'auto',
             backgroundColor: 'var(--color-pure-white)',
             borderRadius: '16px',
-            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)',
+            boxShadow: definitionPanel.isDragging ? '0 15px 35px rgba(0, 0, 0, 0.25)' : '0 10px 25px rgba(0, 0, 0, 0.15)',
             zIndex: 1000, // 提高z-index确保在最上层
             padding: '24px',
             fontFamily: "'Inter', 'Source Han Sans CN', sans-serif",
@@ -871,7 +969,9 @@ export default function FocusLearningPage() {
             visibility: 'visible',
             opacity: 1,
             display: 'block',
-            pointerEvents: 'auto'
+            pointerEvents: 'auto',
+            cursor: definitionPanel.isDragging ? 'move' : 'default',
+            transition: definitionPanel.isDragging ? 'none' : 'box-shadow 0.2s ease'
           }}
           onAnimationStart={() => {
             logEvent('VISIBILITY_CHECK', 'definitionPanel-animation-start', {
@@ -920,6 +1020,18 @@ export default function FocusLearningPage() {
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // 播放音频
+                  const audioUrl = definitionPanel.pronunciationData?.american?.audioUrl ||
+                                  definitionPanel.pronunciationData?.british?.audioUrl;
+                  if (audioUrl) {
+                    const audio = new Audio(audioUrl);
+                    audio.play().catch(error => {
+                      console.error('播放音频失败:', error);
+                    });
+                  }
+                }}
                 style={{
                   width: '32px',
                   height: '32px',
@@ -947,53 +1059,15 @@ export default function FocusLearningPage() {
             lineHeight: '1.8',
             color: 'var(--color-ink-black)'
           }}>
-            
-            {/* 基本释义 */}
-            {definitionPanel.definition?.definitions?.basic && definitionPanel.definition.definitions.basic.length > 0 && (
-              <div style={{ marginBottom: '16px' }}>
-                {definitionPanel.definition.definitions.basic.map((def: any, index: number) => (
-                  <div key={index} style={{ marginBottom: '8px' }}>
-                    <span style={{ fontWeight: '600' }}>{def.partOfSpeech}</span> {def.meaning}
-                  </div>
-                ))}
-              </div>
-            )}
-            
-            {/* 如果没有结构化释义，尝试显示原始释义数据 */}
-            {!definitionPanel.definition?.definitions?.basic && definitionPanel.definition && (
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontSize: '14px', color: 'var(--color-rock-gray)', marginBottom: '8px' }}>释义:</div>
-                {typeof definitionPanel.definition === 'string' ? (
-                  <div>{definitionPanel.definition}</div>
-                ) : definitionPanel.definition.pronunciation ? (
-                  <div>音标: {definitionPanel.definition.pronunciation}</div>
-                ) : (
-                  <div>释义数据已加载，但格式不匹配</div>
-                )}
-              </div>
-            )}
-            
-            {/* 如果完全没有释义数据，显示提示 */}
-            {!definitionPanel.definition && (
-              <div style={{
-                padding: '16px',
-                textAlign: 'center',
-                color: 'var(--color-rock-gray)',
-                fontStyle: 'italic'
-              }}>
-                释义数据加载中...
-              </div>
-            )}
-            
-            {/* 权威英汉释义 */}
+            {/* 权威英汉释义 - 优先显示 */}
             {definitionPanel.definition?.authoritativeDefinitions && definitionPanel.definition.authoritativeDefinitions.length > 0 && (
               <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontSize: '14px', color: 'var(--color-rock-gray)', marginBottom: '8px' }}>权威英汉释义:</div>
+                <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--color-ink-black)', marginBottom: '8px' }}>权威英汉释义</div>
                 {definitionPanel.definition.authoritativeDefinitions.map((authDef: any, index: number) => (
                   <div key={index} style={{ marginBottom: '12px' }}>
-                    <div style={{ fontWeight: '600', marginBottom: '4px' }}>{authDef.partOfSpeech}</div>
+                    <div style={{ fontWeight: '600', marginBottom: '4px', color: 'var(--color-focus-blue)' }}>{authDef.partOfSpeech}</div>
                     {authDef.definitions.map((defItem: any, defIndex: number) => (
-                      <div key={defIndex} style={{ marginLeft: '16px', marginBottom: '6px' }}>
+                      <div key={defIndex} style={{ marginLeft: '16px', marginBottom: '8px' }}>
                         <span style={{ fontWeight: '500' }}>{defItem.number}.</span>
                         <span style={{ marginLeft: '4px' }}>{defItem.chineseMeaning}</span>
                         {defItem.englishMeaning && (
@@ -1002,7 +1076,7 @@ export default function FocusLearningPage() {
                         {defItem.examples && defItem.examples.length > 0 && (
                           <div style={{ marginTop: '4px', marginLeft: '16px' }}>
                             {defItem.examples.map((example: any, exIndex: number) => (
-                              <div key={exIndex} style={{ fontStyle: 'italic', fontSize: '14px', color: 'var(--color-rock-gray)' }}>
+                              <div key={exIndex} style={{ fontStyle: 'italic', fontSize: '14px', color: 'var(--color-rock-gray)', marginBottom: '4px' }}>
                                 {example.english} {example.chinese && `(${example.chinese})`}
                               </div>
                             ))}
@@ -1014,14 +1088,14 @@ export default function FocusLearningPage() {
                     {/* 习语 */}
                     {authDef.idioms && authDef.idioms.length > 0 && (
                       <div style={{ marginTop: '8px', marginLeft: '16px' }}>
-                        <div style={{ fontWeight: '500', marginBottom: '4px' }}>习语:</div>
+                        <div style={{ fontWeight: '500', marginBottom: '4px', color: 'var(--color-focus-blue)' }}>习语:</div>
                         {authDef.idioms.map((idiom: any, idiomIndex: number) => (
                           <div key={idiomIndex} style={{ marginBottom: '6px' }}>
                             <span style={{ fontWeight: '500' }}>{idiom.number}. {idiom.title}</span> - {idiom.meaning}
                             {idiom.examples && idiom.examples.length > 0 && (
                               <div style={{ marginTop: '4px', marginLeft: '16px' }}>
                                 {idiom.examples.map((example: any, exIndex: number) => (
-                                  <div key={exIndex} style={{ fontStyle: 'italic', fontSize: '14px', color: 'var(--color-rock-gray)' }}>
+                                  <div key={exIndex} style={{ fontStyle: 'italic', fontSize: '14px', color: 'var(--color-rock-gray)', marginBottom: '4px' }}>
                                     {example.english} {example.chinese && `(${example.chinese})`}
                                   </div>
                                 ))}
@@ -1039,10 +1113,10 @@ export default function FocusLearningPage() {
             {/* 英汉释义 */}
             {definitionPanel.definition?.bilingualDefinitions && definitionPanel.definition.bilingualDefinitions.length > 0 && (
               <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontSize: '14px', color: 'var(--color-rock-gray)', marginBottom: '8px' }}>英汉释义:</div>
+                <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--color-ink-black)', marginBottom: '8px' }}>英汉释义</div>
                 {definitionPanel.definition.bilingualDefinitions.map((bilDef: any, index: number) => (
                   <div key={index} style={{ marginBottom: '12px' }}>
-                    <div style={{ fontWeight: '600', marginBottom: '4px' }}>{bilDef.partOfSpeech}</div>
+                    <div style={{ fontWeight: '600', marginBottom: '4px', color: 'var(--color-focus-blue)' }}>{bilDef.partOfSpeech}</div>
                     {bilDef.definitions.map((defItem: any, defIndex: number) => (
                       <div key={defIndex} style={{ marginLeft: '16px', marginBottom: '4px' }}>
                         <span style={{ fontWeight: '500' }}>{defItem.number}.</span> {defItem.meaning}
@@ -1053,16 +1127,21 @@ export default function FocusLearningPage() {
               </div>
             )}
             
-            {/* 英文释义 */}
+            {/* 英英释义 */}
             {definitionPanel.definition?.englishDefinitions && definitionPanel.definition.englishDefinitions.length > 0 && (
               <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontSize: '14px', color: 'var(--color-rock-gray)', marginBottom: '8px' }}>英英释义:</div>
+                <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--color-ink-black)', marginBottom: '8px' }}>英英释义</div>
                 {definitionPanel.definition.englishDefinitions.map((engDef: any, index: number) => (
                   <div key={index} style={{ marginBottom: '12px' }}>
-                    <div style={{ fontWeight: '600', marginBottom: '4px' }}>{engDef.partOfSpeech}</div>
+                    <div style={{ fontWeight: '600', marginBottom: '4px', color: 'var(--color-focus-blue)' }}>{engDef.partOfSpeech}</div>
                     {engDef.definitions.map((defItem: any, defIndex: number) => (
                       <div key={defIndex} style={{ marginLeft: '16px', marginBottom: '4px' }}>
                         <span style={{ fontWeight: '500' }}>{defItem.number}.</span> {defItem.meaning}
+                        {defItem.linkedWords && defItem.linkedWords.length > 0 && (
+                          <div style={{ marginTop: '2px', marginLeft: '16px', fontSize: '14px', color: 'var(--color-rock-gray)' }}>
+                            相关词: {defItem.linkedWords.join(', ')}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1070,18 +1149,89 @@ export default function FocusLearningPage() {
               </div>
             )}
             
+            {/* 基本释义 - 作为后备显示 */}
+            {!definitionPanel.definition?.authoritativeDefinitions &&
+             !definitionPanel.definition?.bilingualDefinitions &&
+             !definitionPanel.definition?.englishDefinitions &&
+             definitionPanel.definition?.definitions?.basic &&
+             definitionPanel.definition.definitions.basic.length > 0 && (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--color-ink-black)', marginBottom: '8px' }}>基本释义</div>
+                {definitionPanel.definition.definitions.basic.map((def: any, index: number) => (
+                  <div key={index} style={{ marginBottom: '8px' }}>
+                    <span style={{ fontWeight: '600', color: 'var(--color-focus-blue)' }}>{def.partOfSpeech}</span> {def.meaning}
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {/* 网络释义 */}
+            {definitionPanel.definition?.definitions?.web && definitionPanel.definition.definitions.web.length > 0 && (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--color-ink-black)', marginBottom: '8px' }}>网络释义</div>
+                {definitionPanel.definition.definitions.web.map((def: any, index: number) => (
+                  <div key={index} style={{ marginBottom: '8px', marginLeft: '16px' }}>
+                    {def.meaning}
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {/* 词形变化 */}
+            {definitionPanel.definition?.wordForms && definitionPanel.definition.wordForms.length > 0 && (
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--color-ink-black)', marginBottom: '8px' }}>词形变化</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginLeft: '16px' }}>
+                  {definitionPanel.definition.wordForms.map((form: any, index: number) => (
+                    <div key={index} style={{
+                      backgroundColor: 'var(--color-gray-100)',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '14px'
+                    }}>
+                      <span style={{ fontWeight: '500' }}>{form.form}:</span> {form.word}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
             {/* 例句 */}
             {definitionPanel.definition?.sentences && definitionPanel.definition.sentences.length > 0 && (
               <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #E2E8F0' }}>
-                <div style={{ fontSize: '14px', color: 'var(--color-rock-gray)', marginBottom: '8px' }}>例句:</div>
-                {definitionPanel.definition.sentences.slice(0, 3).map((sentence: any, index: number) => (
-                  <div key={index} style={{ marginBottom: '8px', fontStyle: 'italic' }}>
-                    <div style={{ color: 'var(--color-ink-black)' }}>{sentence.english}</div>
+                <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--color-ink-black)', marginBottom: '8px' }}>例句</div>
+                {definitionPanel.definition.sentences.slice(0, 5).map((sentence: any, index: number) => (
+                  <div key={index} style={{ marginBottom: '12px', fontStyle: 'italic' }}>
+                    <div style={{ color: 'var(--color-ink-black)', marginBottom: '4px' }}>{sentence.english}</div>
                     {sentence.chinese && (
-                      <div style={{ color: 'var(--color-rock-gray)', marginTop: '2px' }}>{sentence.chinese}</div>
+                      <div style={{ color: 'var(--color-rock-gray)' }}>{sentence.chinese}</div>
+                    )}
+                    {sentence.source && (
+                      <div style={{ fontSize: '12px', color: 'var(--color-rock-gray)', marginTop: '2px' }}>
+                        来源: {sentence.source}
+                      </div>
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+            
+            {/* 如果完全没有释义数据，显示提示 */}
+            {!definitionPanel.definition ||
+             (!definitionPanel.definition.authoritativeDefinitions &&
+              !definitionPanel.definition.bilingualDefinitions &&
+              !definitionPanel.definition.englishDefinitions &&
+              !definitionPanel.definition.definitions?.basic &&
+              !definitionPanel.definition.definitions?.web &&
+              !definitionPanel.definition.sentences &&
+              !definitionPanel.definition.wordForms) && (
+              <div style={{
+                padding: '16px',
+                textAlign: 'center',
+                color: 'var(--color-rock-gray)',
+                fontStyle: 'italic'
+              }}>
+                释义数据加载中...
               </div>
             )}
           </div>
