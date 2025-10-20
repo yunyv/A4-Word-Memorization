@@ -8,6 +8,64 @@ import { Button } from '@/components/ui/button';
 import { Settings, Maximize2, Volume2 } from 'lucide-react';
 import { authFetch } from '@/hooks/useAuth';
 
+// 日志记录系统
+interface LogEntry {
+  timestamp: string;
+  type: 'PANEL_OPEN' | 'PANEL_CLOSE' | 'CLICK_EVENT' | 'STATE_CHANGE' | 'ERROR' | 'VISIBILITY_CHECK';
+  source: string;
+  details: any;
+}
+
+const logEvent = (type: LogEntry['type'], source: string, details: any) => {
+  if (process.env.NODE_ENV === 'development') {
+    const entry: LogEntry = {
+      timestamp: new Date().toISOString(),
+      type,
+      source,
+      details
+    };
+    console.log(`[DefinitionPanel] ${type}:`, entry);
+  }
+};
+
+// 检查释义面板视觉状态的辅助函数
+const checkPanelVisibility = (panelId: string) => {
+  if (process.env.NODE_ENV === 'development') {
+    setTimeout(() => {
+      const panelElement = document.querySelector('.definition-panel');
+      if (panelElement) {
+        const rect = panelElement.getBoundingClientRect();
+        const computedStyle = window.getComputedStyle(panelElement);
+        
+        logEvent('VISIBILITY_CHECK', 'checkPanelVisibility', {
+          panelId,
+          existsInDOM: true,
+          isVisible: computedStyle.visibility !== 'hidden',
+          displayValue: computedStyle.display,
+          opacityValue: computedStyle.opacity,
+          zIndexValue: computedStyle.zIndex,
+          transformValue: computedStyle.transform,
+          position: {
+            top: rect.top,
+            left: rect.left,
+            width: rect.width,
+            height: rect.height
+          },
+          isInViewport: rect.top >= 0 && rect.left >= 0 &&
+                       rect.bottom <= window.innerHeight &&
+                       rect.right <= window.innerWidth
+        });
+      } else {
+        logEvent('VISIBILITY_CHECK', 'checkPanelVisibility', {
+          panelId,
+          existsInDOM: false,
+          message: 'Panel element not found in DOM'
+        });
+      }
+    }, 100); // 延迟100ms检查，确保动画完成
+  }
+};
+
 // 单词卡片接口
 interface WordCard {
   id: string;
@@ -46,6 +104,174 @@ export default function FocusLearningPage() {
   
   const [wordCards, setWordCards] = useState<WordCard[]>([]);
   const [definitionPanel, setDefinitionPanel] = useState<DefinitionPanel | null>(null);
+  
+  // 包装 setDefinitionPanel 以添加日志记录
+  const setDefinitionPanelWithLogging = useCallback((newPanel: DefinitionPanel | null) => {
+    const oldPanel = definitionPanel;
+    
+    if (newPanel && !oldPanel) {
+      // 面板打开
+      logEvent('PANEL_OPEN', 'setDefinitionPanel', {
+        panelId: newPanel.wordId,
+        panelText: newPanel.wordText,
+        hasDefinition: !!newPanel.definition,
+        timestamp: Date.now()
+      });
+      
+      // 延迟检查面板视觉状态
+      checkPanelVisibility(newPanel.wordId);
+      
+      // 启动定期检查机制
+      if (visibilityCheckIntervalRef.current) {
+        clearInterval(visibilityCheckIntervalRef.current);
+      }
+      
+      let checkCount = 0;
+      visibilityCheckIntervalRef.current = setInterval(() => {
+        checkCount++;
+        const panelElement = document.querySelector('.definition-panel');
+        
+        if (panelElement) {
+          const rect = panelElement.getBoundingClientRect();
+          const computedStyle = window.getComputedStyle(panelElement);
+          
+          logEvent('VISIBILITY_CHECK', 'periodic-check', {
+            panelId: newPanel.wordId,
+            checkCount,
+            existsInDOM: true,
+            isVisible: computedStyle.visibility !== 'hidden' && computedStyle.display !== 'none',
+            displayValue: computedStyle.display,
+            opacityValue: computedStyle.opacity,
+            position: {
+              top: rect.top,
+              left: rect.left,
+              width: rect.width,
+              height: rect.height
+            },
+            isInViewport: rect.top >= 0 && rect.left >= 0 &&
+                         rect.bottom <= window.innerHeight &&
+                         rect.right <= window.innerWidth
+          });
+        } else {
+          logEvent('VISIBILITY_CHECK', 'periodic-check', {
+            panelId: newPanel.wordId,
+            checkCount,
+            existsInDOM: false,
+            message: 'Panel element disappeared from DOM'
+          });
+          
+          // 如果面板从DOM中消失，停止检查
+          if (visibilityCheckIntervalRef.current) {
+            clearInterval(visibilityCheckIntervalRef.current);
+            visibilityCheckIntervalRef.current = null;
+          }
+        }
+        
+        // 最多检查10次（5秒）
+        if (checkCount >= 10) {
+          if (visibilityCheckIntervalRef.current) {
+            clearInterval(visibilityCheckIntervalRef.current);
+            visibilityCheckIntervalRef.current = null;
+          }
+        }
+      }, 500); // 每500ms检查一次
+    } else if (!newPanel && oldPanel) {
+      // 面板关闭
+      logEvent('PANEL_CLOSE', 'setDefinitionPanel', {
+        panelId: oldPanel.wordId,
+        panelText: oldPanel.wordText,
+        timestamp: Date.now()
+      });
+      
+      // 检查面板是否真的从DOM中移除
+      setTimeout(() => {
+        const panelElement = document.querySelector('.definition-panel');
+        logEvent('VISIBILITY_CHECK', 'setDefinitionPanel-close', {
+          panelId: oldPanel.wordId,
+          stillExistsInDOM: !!panelElement,
+          message: panelElement ? 'Panel still exists in DOM after close' : 'Panel properly removed from DOM'
+        });
+      }, 50);
+      
+      // 停止定期检查
+      if (visibilityCheckIntervalRef.current) {
+        clearInterval(visibilityCheckIntervalRef.current);
+        visibilityCheckIntervalRef.current = null;
+      }
+    } else if (newPanel && oldPanel && newPanel.wordId !== oldPanel.wordId) {
+      // 面板切换
+      logEvent('PANEL_CLOSE', 'setDefinitionPanel', {
+        reason: 'panel_switch',
+        oldPanelId: oldPanel.wordId,
+        newPanelId: newPanel.wordId,
+        timestamp: Date.now()
+      });
+      logEvent('PANEL_OPEN', 'setDefinitionPanel', {
+        panelId: newPanel.wordId,
+        panelText: newPanel.wordText,
+        hasDefinition: !!newPanel.definition,
+        timestamp: Date.now()
+      });
+      
+      // 延迟检查新面板的视觉状态
+      checkPanelVisibility(newPanel.wordId);
+      
+      // 启动定期检查机制（同上）
+      if (visibilityCheckIntervalRef.current) {
+        clearInterval(visibilityCheckIntervalRef.current);
+      }
+      
+      let checkCount = 0;
+      visibilityCheckIntervalRef.current = setInterval(() => {
+        checkCount++;
+        const panelElement = document.querySelector('.definition-panel');
+        
+        if (panelElement) {
+          const rect = panelElement.getBoundingClientRect();
+          const computedStyle = window.getComputedStyle(panelElement);
+          
+          logEvent('VISIBILITY_CHECK', 'periodic-check-switch', {
+            panelId: newPanel.wordId,
+            checkCount,
+            existsInDOM: true,
+            isVisible: computedStyle.visibility !== 'hidden' && computedStyle.display !== 'none',
+            displayValue: computedStyle.display,
+            opacityValue: computedStyle.opacity,
+            position: {
+              top: rect.top,
+              left: rect.left,
+              width: rect.width,
+              height: rect.height
+            },
+            isInViewport: rect.top >= 0 && rect.left >= 0 &&
+                         rect.bottom <= window.innerHeight &&
+                         rect.right <= window.innerWidth
+          });
+        } else {
+          logEvent('VISIBILITY_CHECK', 'periodic-check-switch', {
+            panelId: newPanel.wordId,
+            checkCount,
+            existsInDOM: false,
+            message: 'Panel element disappeared from DOM during switch'
+          });
+          
+          if (visibilityCheckIntervalRef.current) {
+            clearInterval(visibilityCheckIntervalRef.current);
+            visibilityCheckIntervalRef.current = null;
+          }
+        }
+        
+        if (checkCount >= 10) {
+          if (visibilityCheckIntervalRef.current) {
+            clearInterval(visibilityCheckIntervalRef.current);
+            visibilityCheckIntervalRef.current = null;
+          }
+        }
+      }, 500);
+    }
+    
+    setDefinitionPanel(newPanel);
+  }, [definitionPanel]);
   const [sessionMode, setSessionMode] = useState<'new' | 'review' | 'test' | null>(null);
   const [wordlistId, setWordlistId] = useState<number | undefined>(undefined);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -53,6 +279,7 @@ export default function FocusLearningPage() {
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [collisionDetected, setCollisionDetected] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const visibilityCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // 生成不重叠的随机位置
   const generateRandomPosition = useCallback((existingCards: WordCard[]): { x: number; y: number } => {
@@ -121,7 +348,11 @@ export default function FocusLearningPage() {
     
     // 如果有展开的释义面板，先关闭
     if (definitionPanel) {
-      setDefinitionPanel(null);
+      logEvent('PANEL_CLOSE', 'handleMouseDown', {
+        reason: 'dragging_started',
+        panelId: definitionPanel.wordId
+      });
+      setDefinitionPanelWithLogging(null);
     }
     
     const card = wordCards.find(c => c.id === cardId);
@@ -298,23 +529,42 @@ export default function FocusLearningPage() {
   }, [learningState.currentWordData, learningState.currentWordText]);
 
   // 处理单词卡片点击
-  const handleWordCardClick = useCallback((cardId: string) => {
+  const handleWordCardClick = useCallback((cardId: string, event?: React.MouseEvent) => {
     const card = wordCards.find(c => c.id === cardId);
-    if (!card || isTransitioning) return;
+    if (!card || isTransitioning) {
+      logEvent('CLICK_EVENT', 'handleWordCardClick', {
+        cardId,
+        reason: 'card not found or transitioning',
+        isTransitioning
+      });
+      return;
+    }
 
-    // 调试日志
-    console.log('点击的卡片:', card);
-    console.log('卡片释义数据:', card.definition);
+    logEvent('CLICK_EVENT', 'handleWordCardClick', {
+      cardId,
+      cardText: card.text,
+      hasDefinition: !!card.definition,
+      currentPanelId: definitionPanel?.wordId
+    });
 
     // 如果有展开的释义面板，先关闭
     if (definitionPanel && definitionPanel.wordId !== cardId) {
-      setDefinitionPanel(null);
+      logEvent('PANEL_CLOSE', 'handleWordCardClick', {
+        reason: 'clicking different card',
+        oldPanelId: definitionPanel.wordId,
+        newCardId: cardId
+      });
+      setDefinitionPanelWithLogging(null);
       return;
     }
 
     // 如果点击的是已展开的卡片，关闭释义面板
     if (definitionPanel && definitionPanel.wordId === cardId) {
-      setDefinitionPanel(null);
+      logEvent('PANEL_CLOSE', 'handleWordCardClick', {
+        reason: 'clicking same card to close',
+        panelId: cardId
+      });
+      setDefinitionPanelWithLogging(null);
       return;
     }
 
@@ -329,13 +579,30 @@ export default function FocusLearningPage() {
       sourceCardPosition: card.position
     };
     
-    console.log('即将设置的释义面板数据:', newDefinitionPanel);
-    setDefinitionPanel(newDefinitionPanel);
+    logEvent('PANEL_OPEN', 'handleWordCardClick', {
+      cardId,
+      cardText: card.text,
+      hasDefinition: !!card.definition,
+      panelData: newDefinitionPanel
+    });
+    
+    setDefinitionPanelWithLogging(newDefinitionPanel);
   }, [wordCards, definitionPanel, isTransitioning]);
 
   // 处理点击外部区域
   const handleOutsideClick = useCallback((event: MouseEvent) => {
+    logEvent('CLICK_EVENT', 'handleOutsideClick', {
+      eventType: 'outside_click',
+      target: (event.target as HTMLElement).tagName,
+      targetClass: (event.target as HTMLElement).className,
+      currentPanelId: definitionPanel?.wordId
+    });
+
     if (!containerRef.current || !containerRef.current.contains(event.target as Node)) {
+      logEvent('CLICK_EVENT', 'handleOutsideClick', {
+        reason: 'click outside container',
+        action: 'ignored'
+      });
       return;
     }
 
@@ -349,14 +616,35 @@ export default function FocusLearningPage() {
     const panelElement = document.querySelector('.definition-panel');
     const isClickInsidePanel = panelElement && panelElement.contains(target);
 
+    logEvent('CLICK_EVENT', 'handleOutsideClick', {
+      checks: {
+        isClickOnCard: !!isClickOnCard,
+        isClickOnPanel: !!isClickOnPanel,
+        isClickOnControls: !!isClickOnControls,
+        isClickInsidePanel: !!isClickInsidePanel,
+        hasDefinitionPanel: !!definitionPanel
+      }
+    });
+
     if (!isClickOnCard && !isClickOnPanel && !isClickOnControls && !isClickInsidePanel && definitionPanel) {
+      logEvent('PANEL_CLOSE', 'handleOutsideClick', {
+        reason: 'click outside valid elements',
+        panelId: definitionPanel.wordId,
+        willMoveToNextWord: true
+      });
+      
       // 关闭释义面板并添加新单词
-      setDefinitionPanel(null);
+      setDefinitionPanelWithLogging(null);
       
       // 移动到下一个单词
       setTimeout(() => {
         nextWord();
       }, 300);
+    } else {
+      logEvent('CLICK_EVENT', 'handleOutsideClick', {
+        reason: 'click ignored - inside valid element',
+        action: 'panel_stays_open'
+      });
     }
   }, [definitionPanel, nextWord]);
 
@@ -373,14 +661,26 @@ export default function FocusLearningPage() {
         event.preventDefault();
         // 关闭释义面板并添加新单词
         if (definitionPanel) {
-          setDefinitionPanel(null);
+          logEvent('PANEL_CLOSE', 'keyboard', {
+            key: 'Space',
+            panelId: definitionPanel.wordId,
+            willMoveToNextWord: true
+          });
+          setDefinitionPanelWithLogging(null);
           setTimeout(() => {
             nextWord();
           }, 300);
         }
       } else if (event.code === 'Escape') {
         // 关闭释义面板
-        setDefinitionPanel(null);
+        if (definitionPanel) {
+          logEvent('PANEL_CLOSE', 'keyboard', {
+            key: 'Escape',
+            panelId: definitionPanel.wordId,
+            willMoveToNextWord: false
+          });
+        }
+        setDefinitionPanelWithLogging(null);
       }
     };
     
@@ -478,7 +778,9 @@ export default function FocusLearningPage() {
           onMouseDown={(e) => handleMouseDown(e, card.id)}
           onClick={(e) => {
             e.stopPropagation();
-            !card.isDragging && handleWordCardClick(card.id);
+            if (!card.isDragging) {
+              handleWordCardClick(card.id, e);
+            }
           }}
         >
           {card.text}
@@ -535,7 +837,21 @@ export default function FocusLearningPage() {
       {definitionPanel && (
         <div
           className="definition-panel"
-          onClick={(e) => e.stopPropagation()} // 防止点击事件冒泡
+          onClick={(e) => {
+            e.stopPropagation();
+            logEvent('CLICK_EVENT', 'definitionPanel', {
+              action: 'panel_clicked',
+              panelId: definitionPanel.wordId,
+              panelText: definitionPanel.wordText
+            });
+          }} // 防止点击事件冒泡
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            logEvent('CLICK_EVENT', 'definitionPanel', {
+              action: 'panel_mousedown',
+              panelId: definitionPanel.wordId
+            });
+          }}
           style={{
             position: 'absolute',
             left: `${definitionPanel.position.x}%`,
@@ -551,23 +867,28 @@ export default function FocusLearningPage() {
             zIndex: 1000, // 提高z-index确保在最上层
             padding: '24px',
             fontFamily: "'Inter', 'Source Han Sans CN', sans-serif",
-            animation: 'definitionPanelExpand 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+            animation: 'definitionPanelExpand 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            visibility: 'visible',
+            opacity: 1,
+            display: 'block',
+            pointerEvents: 'auto'
+          }}
+          onAnimationStart={() => {
+            logEvent('VISIBILITY_CHECK', 'definitionPanel-animation-start', {
+              panelId: definitionPanel.wordId,
+              timestamp: Date.now()
+            });
+          }}
+          onAnimationEnd={() => {
+            logEvent('VISIBILITY_CHECK', 'definitionPanel-animation-end', {
+              panelId: definitionPanel.wordId,
+              timestamp: Date.now()
+            });
+            
+            // 动画结束后再次检查视觉状态
+            checkPanelVisibility(definitionPanel.wordId);
           }}
         >
-          {/* 调试信息 */}
-          {process.env.NODE_ENV === 'development' && (
-            <div style={{
-              position: 'absolute',
-              top: '5px',
-              right: '5px',
-              fontSize: '10px',
-              color: 'red',
-              backgroundColor: 'rgba(255, 255, 255, 0.8)',
-              padding: '2px'
-            }}>
-              Debug: {definitionPanel.definition ? '有数据' : '无数据'}
-            </div>
-          )}
           {/* 单词标题 */}
           <div style={{
             fontSize: '24px',
@@ -626,20 +947,6 @@ export default function FocusLearningPage() {
             lineHeight: '1.8',
             color: 'var(--color-ink-black)'
           }}>
-            {/* 调试信息 */}
-            {process.env.NODE_ENV === 'development' && (
-              <div style={{
-                fontSize: '12px',
-                color: 'red',
-                marginBottom: '8px',
-                padding: '4px',
-                backgroundColor: '#f0f0f0',
-                borderRadius: '4px'
-              }}>
-                释义数据类型: {typeof definitionPanel.definition}<br/>
-                释义数据: {JSON.stringify(definitionPanel.definition, null, 2).substring(0, 200)}...
-              </div>
-            )}
             
             {/* 基本释义 */}
             {definitionPanel.definition?.definitions?.basic && definitionPanel.definition.definitions.basic.length > 0 && (
@@ -836,11 +1143,24 @@ export default function FocusLearningPage() {
           0% {
             opacity: 0;
             transform: translate(-50%, -50%) scale(0.8);
+            visibility: hidden;
+          }
+          1% {
+            visibility: visible;
           }
           100% {
             opacity: 1;
             transform: translate(-50%, -50%) scale(1);
+            visibility: visible;
           }
+        }
+        
+        .definition-panel {
+          /* 确保释义面板始终可见，不会被动画影响 */
+          animation-fill-mode: forwards !important;
+          /* 防止动画结束后元素消失 */
+          visibility: visible !important;
+          opacity: 1 !important;
         }
         
         .word-card:hover:not(.word-card-dragging) {
