@@ -11,63 +11,24 @@ import { authFetch } from '@/hooks/useAuth';
 import { DefinitionSettingsButton } from '@/components/learning/DefinitionSettingsButton';
 import { DefinitionSettingsModal } from '@/components/learning/DefinitionSettingsModal';
 
-// 日志记录系统
-interface LogEntry {
-  timestamp: string;
-  type: 'PANEL_OPEN' | 'PANEL_CLOSE' | 'CLICK_EVENT' | 'STATE_CHANGE' | 'ERROR' | 'VISIBILITY_CHECK';
-  source: string;
-  details: any;
+
+// 物理属性接口
+interface CardPhysics {
+  velocity: { x: number; y: number }; // 速度 (百分比/帧)
+  acceleration: { x: number; y: number }; // 加速度
+  mass: number; // 质量
+  elasticity: number; // 弹性系数
+  friction: number; // 摩擦系数
 }
 
-const logEvent = (type: LogEntry['type'], source: string, details: any) => {
-  if (process.env.NODE_ENV === 'development') {
-    const entry: LogEntry = {
-      timestamp: new Date().toISOString(),
-      type,
-      source,
-      details
-    };
-    console.log(`[DefinitionPanel] ${type}:`, entry);
-  }
-};
-
-// 检查释义面板视觉状态的辅助函数
-const checkPanelVisibility = (panelId: string) => {
-  if (process.env.NODE_ENV === 'development') {
-    setTimeout(() => {
-      const panelElement = document.querySelector('.definition-panel');
-      if (panelElement) {
-        const rect = panelElement.getBoundingClientRect();
-        const computedStyle = window.getComputedStyle(panelElement);
-        
-        logEvent('VISIBILITY_CHECK', 'checkPanelVisibility', {
-          panelId,
-          existsInDOM: true,
-          isVisible: computedStyle.visibility !== 'hidden',
-          displayValue: computedStyle.display,
-          opacityValue: computedStyle.opacity,
-          zIndexValue: computedStyle.zIndex,
-          transformValue: computedStyle.transform,
-          position: {
-            top: rect.top,
-            left: rect.left,
-            width: rect.width,
-            height: rect.height
-          },
-          isInViewport: rect.top >= 0 && rect.left >= 0 &&
-                       rect.bottom <= window.innerHeight &&
-                       rect.right <= window.innerWidth
-        });
-      } else {
-        logEvent('VISIBILITY_CHECK', 'checkPanelVisibility', {
-          panelId,
-          existsInDOM: false,
-          message: 'Panel element not found in DOM'
-        });
-      }
-    }, 100); // 延迟100ms检查，确保动画完成
-  }
-};
+// 碰撞信息接口
+interface CollisionInfo {
+  cardId: string;
+  otherCardId: string;
+  collisionPoint: { x: number; y: number };
+  collisionNormal: { x: number; y: number };
+  overlapDepth: number;
+}
 
 // 单词卡片接口
 interface WordCard {
@@ -79,6 +40,9 @@ interface WordCard {
   isExpanded: boolean;
   isAnimating: boolean;
   isDragging?: boolean;
+  physics?: CardPhysics; // 物理属性
+  isColliding?: boolean; // 是否正在碰撞
+  collisionScale?: number; // 碰撞挤压效果
 }
 
 // 释义面板接口
@@ -91,6 +55,282 @@ interface DefinitionPanel {
   isVisible: boolean;
   sourceCardPosition: { x: number; y: number }; // 源卡片位置
   isDragging?: boolean; // 是否正在拖动
+}
+
+// 碰撞检测引擎类
+class CollisionEngine {
+  private static readonly DEFAULT_ELASTICITY = 0.7; // 默认弹性系数
+  private static readonly DEFAULT_FRICTION = 0.95; // 默认摩擦系数
+  private static readonly DEFAULT_MASS = 1.0; // 默认质量
+  private static readonly MIN_VELOCITY = 0.01; // 最小速度阈值
+  private static readonly COLLISION_THRESHOLD = 0.1; // 碰撞阈值（百分比）
+
+  /**
+   * 创建默认的物理属性
+   */
+  static createDefaultPhysics(): CardPhysics {
+    return {
+      velocity: { x: 0, y: 0 },
+      acceleration: { x: 0, y: 0 },
+      mass: this.DEFAULT_MASS,
+      elasticity: this.DEFAULT_ELASTICITY,
+      friction: this.DEFAULT_FRICTION
+    };
+  }
+
+  /**
+   * 检测两个卡片是否碰撞
+   */
+  static detectCollision(
+    card1: WordCard,
+    card2: WordCard,
+    cardWidth: number,
+    cardHeight: number
+  ): CollisionInfo | null {
+    const dx = card2.position.x - card1.position.x;
+    const dy = card2.position.y - card1.position.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // 使用卡片的对角线作为碰撞半径
+    const collisionRadius = Math.sqrt(cardWidth * cardWidth + cardHeight * cardHeight) / 2;
+    const minDistance = collisionRadius * 2;
+
+    if (distance < minDistance && distance > 0) {
+      // 计算碰撞法向量
+      const normalX = dx / distance;
+      const normalY = dy / distance;
+
+      // 计算重叠深度
+      const overlapDepth = minDistance - distance;
+
+      // 计算碰撞点
+      const collisionPoint = {
+        x: card1.position.x + normalX * (collisionRadius + overlapDepth / 2),
+        y: card1.position.y + normalY * (collisionRadius + overlapDepth / 2)
+      };
+
+      return {
+        cardId: card1.id,
+        otherCardId: card2.id,
+        collisionPoint,
+        collisionNormal: { x: normalX, y: normalY },
+        overlapDepth
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * 计算碰撞响应（弹开效果）
+   */
+  static calculateCollisionResponse(
+    collision: CollisionInfo,
+    card1: WordCard,
+    card2: WordCard,
+    cardWidth: number,
+    cardHeight: number
+  ): { velocity1: { x: number; y: number }, velocity2: { x: number; y: number } } {
+    const physics1 = card1.physics || this.createDefaultPhysics();
+    const physics2 = card2.physics || this.createDefaultPhysics();
+
+    // 获取当前速度，如果没有则为零
+    const v1 = { ...physics1.velocity };
+    const v2 = { ...physics2.velocity };
+
+    // 计算相对速度
+    const relativeVelocity = {
+      x: v1.x - v2.x,
+      y: v1.y - v2.y
+    };
+
+    // 计算碰撞法向量方向的相对速度
+    const velocityAlongNormal = relativeVelocity.x * collision.collisionNormal.x +
+                               relativeVelocity.y * collision.collisionNormal.y;
+
+    // 如果物体正在分离，不处理碰撞
+    if (velocityAlongNormal > 0) {
+      return { velocity1: v1, velocity2: v2 };
+    }
+
+    // 计算弹性系数（取两个卡片的平均值）
+    const restitution = (physics1.elasticity + physics2.elasticity) / 2;
+
+    // 计算冲量标量
+    const impulseScalar = -(1 + restitution) * velocityAlongNormal;
+    const impulseScalarX = impulseScalar * collision.collisionNormal.x;
+    const impulseScalarY = impulseScalar * collision.collisionNormal.y;
+
+    // 计算新的速度
+    const totalMass = physics1.mass + physics2.mass;
+    const velocity1 = {
+      x: v1.x + (impulseScalarX * physics2.mass) / totalMass,
+      y: v1.y + (impulseScalarY * physics2.mass) / totalMass
+    };
+
+    const velocity2 = {
+      x: v2.x - (impulseScalarX * physics1.mass) / totalMass,
+      y: v2.y - (impulseScalarY * physics1.mass) / totalMass
+    };
+
+    return { velocity1, velocity2 };
+  }
+
+  /**
+   * 更新卡片物理状态
+   */
+  static updatePhysics(
+    card: WordCard,
+    deltaTime: number = 1
+  ): WordCard {
+    const physics = card.physics || this.createDefaultPhysics();
+
+    // 更新速度（考虑加速度）
+    const newVelocity = {
+      x: (physics.velocity.x + physics.acceleration.x * deltaTime) * physics.friction,
+      y: (physics.velocity.y + physics.acceleration.y * deltaTime) * physics.friction
+    };
+
+    // 如果速度太小，停止运动
+    if (Math.abs(newVelocity.x) < this.MIN_VELOCITY) {
+      newVelocity.x = 0;
+    }
+    if (Math.abs(newVelocity.y) < this.MIN_VELOCITY) {
+      newVelocity.y = 0;
+    }
+
+    // 更新位置
+    const newPosition = {
+      x: card.position.x + newVelocity.x * deltaTime,
+      y: card.position.y + newVelocity.y * deltaTime
+    };
+
+    // 更新物理属性
+    const newPhysics = {
+      ...physics,
+      velocity: newVelocity,
+      acceleration: { x: 0, y: 0 } // 重置加速度
+    };
+
+    return {
+      ...card,
+      position: newPosition,
+      physics: newPhysics,
+      isColliding: Math.abs(newVelocity.x) > this.MIN_VELOCITY || Math.abs(newVelocity.y) > this.MIN_VELOCITY
+    };
+  }
+
+  /**
+   * 应用推力到卡片
+   */
+  static applyImpulse(
+    card: WordCard,
+    impulse: { x: number; y: number }
+  ): WordCard {
+    const physics = card.physics || this.createDefaultPhysics();
+
+    const newVelocity = {
+      x: physics.velocity.x + impulse.x / physics.mass,
+      y: physics.velocity.y + impulse.y / physics.mass
+    };
+
+    const newPhysics = {
+      ...physics,
+      velocity: newVelocity
+    };
+
+    return {
+      ...card,
+      physics: newPhysics,
+      isColliding: true
+    };
+  }
+
+  /**
+   * 计算避免重叠的位置
+   */
+  static resolveOverlap(
+    collision: CollisionInfo,
+    card1: WordCard,
+    card2: WordCard
+  ): { position1: { x: number; y: number }, position2: { x: number; y: number } } {
+    const separationDistance = collision.overlapDepth / 2;
+
+    const position1 = {
+      x: card1.position.x - collision.collisionNormal.x * separationDistance,
+      y: card1.position.y - collision.collisionNormal.y * separationDistance
+    };
+
+    const position2 = {
+      x: card2.position.x + collision.collisionNormal.x * separationDistance,
+      y: card2.position.y + collision.collisionNormal.y * separationDistance
+    };
+
+    return { position1, position2 };
+  }
+}
+
+// 动画控制器类
+class AnimationController {
+  private static activeAnimations = new Map<string, number>();
+
+  /**
+   * 开始卡片动画
+   */
+  static startCardAnimation(
+    cardId: string,
+    updateCallback: () => void,
+    stopCondition: () => boolean = () => false
+  ): void {
+    // 停止已有的动画
+    this.stopCardAnimation(cardId);
+
+    const animate = () => {
+      updateCallback();
+
+      // 检查是否应该停止动画
+      if (stopCondition()) {
+        this.stopCardAnimation(cardId);
+        return;
+      }
+
+      // 继续动画
+      const frameId = requestAnimationFrame(animate);
+      this.activeAnimations.set(cardId, frameId);
+    };
+
+    // 开始动画
+    const frameId = requestAnimationFrame(animate);
+    this.activeAnimations.set(cardId, frameId);
+  }
+
+  /**
+   * 停止卡片动画
+   */
+  static stopCardAnimation(cardId: string): void {
+    const frameId = this.activeAnimations.get(cardId);
+    if (frameId) {
+      cancelAnimationFrame(frameId);
+      this.activeAnimations.delete(cardId);
+    }
+  }
+
+  /**
+   * 停止所有动画
+   */
+  static stopAllAnimations(): void {
+    this.activeAnimations.forEach((frameId) => {
+      cancelAnimationFrame(frameId);
+    });
+    this.activeAnimations.clear();
+  }
+
+  /**
+   * 检查卡片是否正在动画
+   */
+  static isCardAnimating(cardId: string): boolean {
+    return this.activeAnimations.has(cardId);
+  }
 }
 
 export default function FocusLearningPage() {
@@ -119,171 +359,8 @@ export default function FocusLearningPage() {
   const [definitionPanel, setDefinitionPanel] = useState<DefinitionPanel | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   
-  // 包装 setDefinitionPanel 以添加日志记录
+  // 设置释义面板
   const setDefinitionPanelWithLogging = useCallback((newPanel: DefinitionPanel | null) => {
-    const oldPanel = definitionPanel;
-    
-    if (newPanel && !oldPanel) {
-      // 面板打开
-      logEvent('PANEL_OPEN', 'setDefinitionPanel', {
-        panelId: newPanel.wordId,
-        panelText: newPanel.wordText,
-        hasDefinition: !!newPanel.definition,
-        timestamp: Date.now()
-      });
-      
-      // 延迟检查面板视觉状态
-      checkPanelVisibility(newPanel.wordId);
-      
-      // 启动定期检查机制
-      if (visibilityCheckIntervalRef.current) {
-        clearInterval(visibilityCheckIntervalRef.current);
-      }
-      
-      let checkCount = 0;
-      visibilityCheckIntervalRef.current = setInterval(() => {
-        checkCount++;
-        const panelElement = document.querySelector('.definition-panel');
-        
-        if (panelElement) {
-          const rect = panelElement.getBoundingClientRect();
-          const computedStyle = window.getComputedStyle(panelElement);
-          
-          logEvent('VISIBILITY_CHECK', 'periodic-check', {
-            panelId: newPanel.wordId,
-            checkCount,
-            existsInDOM: true,
-            isVisible: computedStyle.visibility !== 'hidden' && computedStyle.display !== 'none',
-            displayValue: computedStyle.display,
-            opacityValue: computedStyle.opacity,
-            position: {
-              top: rect.top,
-              left: rect.left,
-              width: rect.width,
-              height: rect.height
-            },
-            isInViewport: rect.top >= 0 && rect.left >= 0 &&
-                         rect.bottom <= window.innerHeight &&
-                         rect.right <= window.innerWidth
-          });
-        } else {
-          logEvent('VISIBILITY_CHECK', 'periodic-check', {
-            panelId: newPanel.wordId,
-            checkCount,
-            existsInDOM: false,
-            message: 'Panel element disappeared from DOM'
-          });
-          
-          // 如果面板从DOM中消失，停止检查
-          if (visibilityCheckIntervalRef.current) {
-            clearInterval(visibilityCheckIntervalRef.current);
-            visibilityCheckIntervalRef.current = null;
-          }
-        }
-        
-        // 最多检查10次（5秒）
-        if (checkCount >= 10) {
-          if (visibilityCheckIntervalRef.current) {
-            clearInterval(visibilityCheckIntervalRef.current);
-            visibilityCheckIntervalRef.current = null;
-          }
-        }
-      }, 500); // 每500ms检查一次
-    } else if (!newPanel && oldPanel) {
-      // 面板关闭
-      logEvent('PANEL_CLOSE', 'setDefinitionPanel', {
-        panelId: oldPanel.wordId,
-        panelText: oldPanel.wordText,
-        timestamp: Date.now()
-      });
-      
-      // 检查面板是否真的从DOM中移除
-      setTimeout(() => {
-        const panelElement = document.querySelector('.definition-panel');
-        logEvent('VISIBILITY_CHECK', 'setDefinitionPanel-close', {
-          panelId: oldPanel.wordId,
-          stillExistsInDOM: !!panelElement,
-          message: panelElement ? 'Panel still exists in DOM after close' : 'Panel properly removed from DOM'
-        });
-      }, 50);
-      
-      // 停止定期检查
-      if (visibilityCheckIntervalRef.current) {
-        clearInterval(visibilityCheckIntervalRef.current);
-        visibilityCheckIntervalRef.current = null;
-      }
-    } else if (newPanel && oldPanel && newPanel.wordId !== oldPanel.wordId) {
-      // 面板切换
-      logEvent('PANEL_CLOSE', 'setDefinitionPanel', {
-        reason: 'panel_switch',
-        oldPanelId: oldPanel.wordId,
-        newPanelId: newPanel.wordId,
-        timestamp: Date.now()
-      });
-      logEvent('PANEL_OPEN', 'setDefinitionPanel', {
-        panelId: newPanel.wordId,
-        panelText: newPanel.wordText,
-        hasDefinition: !!newPanel.definition,
-        timestamp: Date.now()
-      });
-      
-      // 延迟检查新面板的视觉状态
-      checkPanelVisibility(newPanel.wordId);
-      
-      // 启动定期检查机制（同上）
-      if (visibilityCheckIntervalRef.current) {
-        clearInterval(visibilityCheckIntervalRef.current);
-      }
-      
-      let checkCount = 0;
-      visibilityCheckIntervalRef.current = setInterval(() => {
-        checkCount++;
-        const panelElement = document.querySelector('.definition-panel');
-        
-        if (panelElement) {
-          const rect = panelElement.getBoundingClientRect();
-          const computedStyle = window.getComputedStyle(panelElement);
-          
-          logEvent('VISIBILITY_CHECK', 'periodic-check-switch', {
-            panelId: newPanel.wordId,
-            checkCount,
-            existsInDOM: true,
-            isVisible: computedStyle.visibility !== 'hidden' && computedStyle.display !== 'none',
-            displayValue: computedStyle.display,
-            opacityValue: computedStyle.opacity,
-            position: {
-              top: rect.top,
-              left: rect.left,
-              width: rect.width,
-              height: rect.height
-            },
-            isInViewport: rect.top >= 0 && rect.left >= 0 &&
-                         rect.bottom <= window.innerHeight &&
-                         rect.right <= window.innerWidth
-          });
-        } else {
-          logEvent('VISIBILITY_CHECK', 'periodic-check-switch', {
-            panelId: newPanel.wordId,
-            checkCount,
-            existsInDOM: false,
-            message: 'Panel element disappeared from DOM during switch'
-          });
-          
-          if (visibilityCheckIntervalRef.current) {
-            clearInterval(visibilityCheckIntervalRef.current);
-            visibilityCheckIntervalRef.current = null;
-          }
-        }
-        
-        if (checkCount >= 10) {
-          if (visibilityCheckIntervalRef.current) {
-            clearInterval(visibilityCheckIntervalRef.current);
-            visibilityCheckIntervalRef.current = null;
-          }
-        }
-      }, 500);
-    }
-    
     setDefinitionPanel(newPanel);
   }, [definitionPanel]);
   const [sessionMode, setSessionMode] = useState<'new' | 'review' | 'test' | null>(null);
@@ -294,7 +371,6 @@ export default function FocusLearningPage() {
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [collisionDetected, setCollisionDetected] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const visibilityCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // 计算卡片尺寸百分比
   const getCardDimensions = useCallback(() => {
@@ -338,70 +414,245 @@ export default function FocusLearningPage() {
     };
   }, []);
 
-  // 检查两个位置是否重叠
-  const checkOverlap = useCallback((pos1: { x: number; y: number }, pos2: { x: number; y: number }, cardWidth: number, cardHeight: number, margin: number = 0.5): boolean => {
-    const dx = Math.abs(pos1.x - pos2.x);
-    const dy = Math.abs(pos1.y - pos2.y);
-    return dx < (cardWidth + margin) && dy < (cardHeight + margin);
-  }, []);
-
-  // 检查位置是否与其他卡片重叠
-  const checkCollisionWithOtherCards = useCallback((cardId: string, position: { x: number; y: number }): boolean => {
+  // 检测所有碰撞对
+  const detectAllCollisions = useCallback((cards: WordCard[]): CollisionInfo[] => {
     const { widthPercent, heightPercent } = getCardDimensions();
-    
-    return wordCards.some(card => {
-      if (card.id === cardId) return false;
-      return checkOverlap(position, card.position, widthPercent, heightPercent);
-    });
-  }, [wordCards, checkOverlap, getCardDimensions]);
+    const collisions: CollisionInfo[] = [];
 
-  // 计算碰撞后的弹开位置
-  const calculateBouncePosition = useCallback((cardId: string, newPosition: { x: number; y: number }): { x: number; y: number } => {
-    const { widthPercent, heightPercent } = getCardDimensions();
-    const bounceDistance = 3; // 弹开距离（百分比）
-    
-    // 找到碰撞的卡片
-    const collidingCard = wordCards.find(card => {
-      if (card.id === cardId) return false;
-      return checkOverlap(newPosition, card.position, widthPercent, heightPercent);
-    });
-    
-    if (!collidingCard) return newPosition;
-    
-    // 计算弹开方向
-    const dx = newPosition.x - collidingCard.position.x;
-    const dy = newPosition.y - collidingCard.position.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    
-    if (distance === 0) {
-      // 如果完全重叠，随机选择一个方向
-      const angle = Math.random() * Math.PI * 2;
-      return {
-        x: collidingCard.position.x + Math.cos(angle) * bounceDistance,
-        y: collidingCard.position.y + Math.sin(angle) * bounceDistance
-      };
+    // 检查所有卡片对
+    for (let i = 0; i < cards.length; i++) {
+      for (let j = i + 1; j < cards.length; j++) {
+        const collision = CollisionEngine.detectCollision(
+          cards[i],
+          cards[j],
+          widthPercent,
+          heightPercent
+        );
+
+        if (collision) {
+          collisions.push(collision);
+        }
+      }
     }
-    
-    // 标准化方向向量并应用弹开距离
-    const normalizedDx = dx / distance;
-    const normalizedDy = dy / distance;
-    
-    return {
-      x: collidingCard.position.x + normalizedDx * bounceDistance,
-      y: collidingCard.position.y + normalizedDy * bounceDistance
-    };
-  }, [wordCards, checkOverlap]);
+
+    return collisions;
+  }, [getCardDimensions]);
+
+  // 处理碰撞响应
+  const handleCollisions = useCallback((cards: WordCard[]): WordCard[] => {
+    let updatedCards = [...cards];
+    const collisions = detectAllCollisions(updatedCards);
+
+    if (collisions.length === 0) {
+      return updatedCards;
+    }
+
+    // 处理每个碰撞
+    collisions.forEach(collision => {
+      const card1 = updatedCards.find(c => c.id === collision.cardId);
+      const card2 = updatedCards.find(c => c.id === collision.otherCardId);
+
+      if (!card1 || !card2) return;
+
+      const { widthPercent, heightPercent } = getCardDimensions();
+
+      // 计算碰撞响应速度
+      const { velocity1, velocity2 } = CollisionEngine.calculateCollisionResponse(
+        collision,
+        card1,
+        card2,
+        widthPercent,
+        heightPercent
+      );
+
+      // 解决重叠
+      const { position1, position2 } = CollisionEngine.resolveOverlap(collision, card1, card2);
+
+      // 更新卡片1
+      updatedCards = updatedCards.map(card => {
+        if (card.id === card1.id) {
+          const physics = card.physics || CollisionEngine.createDefaultPhysics();
+          return {
+            ...card,
+            position: position1,
+            physics: { ...physics, velocity: velocity1 },
+            isColliding: true,
+            collisionScale: 0.85 // 挤压效果
+          };
+        }
+        return card;
+      });
+
+      // 更新卡片2
+      updatedCards = updatedCards.map(card => {
+        if (card.id === card2.id) {
+          const physics = card.physics || CollisionEngine.createDefaultPhysics();
+          return {
+            ...card,
+            position: position2,
+            physics: { ...physics, velocity: velocity2 },
+            isColliding: true,
+            collisionScale: 0.85 // 挤压效果
+          };
+        }
+        return card;
+      });
+    });
+
+    return updatedCards;
+  }, [detectAllCollisions, getCardDimensions]);
 
   // 检查位置是否在屏幕边界内
   const checkPositionInBounds = useCallback((position: { x: number; y: number }): { x: number; y: number } => {
     const margin = 5; // 边距百分比
     const { widthPercent, heightPercent } = getCardDimensions();
-    
+
     const boundedX = Math.max(margin, Math.min(100 - margin - widthPercent, position.x));
     const boundedY = Math.max(margin, Math.min(100 - margin - heightPercent, position.y));
-    
+
     return { x: boundedX, y: boundedY };
   }, [getCardDimensions]);
+
+  // 检查卡片是否与其他卡片重叠
+  const checkCollisionWithOtherCards = useCallback((cardId: string, position: { x: number; y: number }): boolean => {
+    const { widthPercent, heightPercent } = getCardDimensions();
+
+    return wordCards.some(card => {
+      if (card.id === cardId) return false;
+      const dx = Math.abs(position.x - card.position.x);
+      const dy = Math.abs(position.y - card.position.y);
+      return dx < (widthPercent - 1) && dy < (heightPercent - 1);
+    });
+  }, [wordCards, getCardDimensions]);
+
+  // 更新所有卡片的物理状态
+  const updatePhysics = useCallback((cards: WordCard[]): WordCard[] => {
+    return cards.map(card => {
+      if (card.isDragging) {
+        // 拖拽中的卡片不更新物理状态
+        return { ...card, isColliding: false, collisionScale: 1 };
+      }
+
+      let updatedCard = CollisionEngine.updatePhysics(card, 0.5);
+
+      // 如果卡片还在运动，检查边界
+      if (updatedCard.isColliding) {
+        const boundedPosition = checkPositionInBounds(updatedCard.position);
+        updatedCard = { ...updatedCard, position: boundedPosition };
+      }
+
+      // 恢复缩放
+      if (updatedCard.collisionScale !== undefined && updatedCard.collisionScale < 1) {
+        updatedCard.collisionScale = Math.min(1, updatedCard.collisionScale + 0.05);
+      }
+
+      // 如果速度很小，停止碰撞状态
+      const physics = updatedCard.physics;
+      if (physics && Math.abs(physics.velocity.x) < 0.01 && Math.abs(physics.velocity.y) < 0.01) {
+        return {
+          ...updatedCard,
+          physics: { ...physics, velocity: { x: 0, y: 0 } },
+          isColliding: false,
+          collisionScale: 1
+        };
+      }
+
+      return updatedCard;
+    });
+  }, [checkPositionInBounds]);
+
+  // 计算拖拽释放时的速度（用于惯性效果）
+  const calculateDragVelocity = useCallback((cardId: string, newPosition: { x: number; y: number }): { x: number; y: number } => {
+    const card = wordCards.find(c => c.id === cardId);
+    if (!card) return { x: 0, y: 0 };
+
+    // 计算速度（基于位置变化）
+    const velocity = {
+      x: (newPosition.x - card.position.x) * 0.3,
+      y: (newPosition.y - card.position.y) * 0.3
+    };
+
+    // 限制最大速度
+    const maxSpeed = 5;
+    const speed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
+    if (speed > maxSpeed) {
+      return {
+        x: (velocity.x / speed) * maxSpeed,
+        y: (velocity.y / speed) * maxSpeed
+      };
+    }
+
+    return velocity;
+  }, [wordCards]);
+
+  // 创建碰撞涟漪效果（扩散到附近的卡片）
+  const createCollisionRipple = useCallback((centerCard: WordCard, impactForce: number) => {
+    setWordCards(prev => {
+      return prev.map(card => {
+        if (card.id === centerCard.id) return card;
+
+        const dx = card.position.x - centerCard.position.x;
+        const dy = card.position.y - centerCard.position.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // 影响范围内的卡片受到推力
+        const affectRadius = 15; // 影响半径（百分比）
+        if (distance < affectRadius && distance > 0) {
+          const force = impactForce * (1 - distance / affectRadius) * 0.5; // 随距离衰减
+          const directionX = dx / distance;
+          const directionY = dy / distance;
+
+          const physics = card.physics || CollisionEngine.createDefaultPhysics();
+          const newVelocity = {
+            x: physics.velocity.x + directionX * force,
+            y: physics.velocity.y + directionY * force
+          };
+
+          return {
+            ...card,
+            physics: { ...physics, velocity: newVelocity },
+            isColliding: true,
+            collisionScale: 0.95
+          };
+        }
+
+        return card;
+      });
+    });
+  }, []);
+
+  // 应用推力到卡片（用于拖拽释放时的弹开效果）
+  const applyCollisionImpulse = useCallback((cardId: string, force: { x: number; y: number }) => {
+    setWordCards(prev => {
+      return prev.map(card => {
+        if (card.id === cardId) {
+          const impulse = {
+            x: force.x * 2, // 放大推力
+            y: force.y * 2
+          };
+          return CollisionEngine.applyImpulse(card, impulse);
+        }
+        return card;
+      });
+    });
+
+    // 开始物理动画
+    AnimationController.startCardAnimation(
+      cardId,
+      () => {
+        setWordCards(prev => {
+          const updated = handleCollisions(prev);
+          return updatePhysics(updated);
+        });
+      },
+      () => {
+        // 当所有卡片都停止运动时停止动画
+        const cards = wordCards.find(c => c.id === cardId);
+        return !cards?.isColliding && (!cards?.physics ||
+          (Math.abs(cards.physics.velocity.x) < 0.01 && Math.abs(cards.physics.velocity.y) < 0.01));
+      }
+    );
+  }, [handleCollisions, updatePhysics, wordCards]);
 
   // 处理鼠标按下事件（开始拖动）
   const handleMouseDown = useCallback((e: React.MouseEvent, cardId: string) => {
@@ -471,13 +722,13 @@ export default function FocusLearningPage() {
   // 处理鼠标移动事件（拖动中）
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!containerRef.current) return;
-    
+
     const containerRect = containerRef.current.getBoundingClientRect();
-    
+
     // 计算鼠标位置（百分比）
     const mouseX = ((e.clientX - containerRect.left) / containerRect.width) * 100;
     const mouseY = ((e.clientY - containerRect.top) / containerRect.height) * 100;
-    
+
     if (draggedCard) {
       // 处理单词卡片拖动
       // 计算新位置（考虑偏移量）
@@ -485,23 +736,27 @@ export default function FocusLearningPage() {
         x: mouseX - dragOffset.x,
         y: mouseY - dragOffset.y
       };
-      
+
       // 检查边界
       const boundedPosition = checkPositionInBounds(newPosition);
-      
+
       // 检查碰撞
       const hasCollision = checkCollisionWithOtherCards(draggedCard, boundedPosition);
       setCollisionDetected(hasCollision);
-      
-      // 如果有碰撞，计算弹开位置
-      const finalPosition = hasCollision ? calculateBouncePosition(draggedCard, boundedPosition) : boundedPosition;
-      
-      // 更新位置
-      setWordCards(prev =>
-        prev.map(card =>
-          card.id === draggedCard ? { ...card, position: finalPosition } : card
-        )
-      );
+
+      // 更新拖拽中的卡片位置
+      setWordCards(prev => {
+        const updatedCards = prev.map(card =>
+          card.id === draggedCard ? { ...card, position: boundedPosition } : card
+        );
+
+        // 如果有碰撞，触发碰撞处理
+        if (hasCollision) {
+          return handleCollisions(updatedCards);
+        }
+
+        return updatedCards;
+      });
     } else if (draggedPanel && definitionPanel) {
       // 处理释义面板拖动
       // 计算新位置（考虑偏移量）
@@ -509,48 +764,84 @@ export default function FocusLearningPage() {
         x: mouseX - dragOffset.x,
         y: mouseY - dragOffset.y
       };
-      
+
       // 面板边界检查（面板较大，需要特殊处理）
       const panelWidthPercent = 50; // 面板宽度百分比
       const panelHeightPercent = 70; // 面板高度百分比
-      
+
       const boundedX = Math.max(panelWidthPercent / 2, Math.min(100 - panelWidthPercent / 2, newPosition.x));
       const boundedY = Math.max(panelHeightPercent / 2, Math.min(100 - panelHeightPercent / 2, newPosition.y));
-      
+
       const boundedPosition = { x: boundedX, y: boundedY };
-      
+
       // 更新面板位置
       setDefinitionPanelWithLogging({
         ...definitionPanel,
         position: boundedPosition
       });
     }
-  }, [draggedCard, draggedPanel, definitionPanel, dragOffset, checkPositionInBounds, checkCollisionWithOtherCards, calculateBouncePosition, setDefinitionPanelWithLogging]);
+  }, [draggedCard, draggedPanel, definitionPanel, dragOffset, checkPositionInBounds, checkCollisionWithOtherCards, handleCollisions, setDefinitionPanelWithLogging]);
 
   // 处理鼠标释放事件（结束拖动）
   const handleMouseUp = useCallback(() => {
     if (draggedCard) {
-      // 移除卡片拖动状态
-      setWordCards(prev =>
-        prev.map(card =>
-          card.id === draggedCard ? { ...card, isDragging: false } : card
-        )
-      );
-      
+      // 获取拖拽卡片
+      const draggedCardObj = wordCards.find(c => c.id === draggedCard);
+
+      if (draggedCardObj) {
+        // 计算拖拽释放时的惯性速度
+        const velocity = calculateDragVelocity(draggedCard, draggedCardObj.position);
+
+        // 应用惯性速度到卡片
+        setWordCards(prev =>
+          prev.map(card => {
+            if (card.id === draggedCard) {
+              const physics = card.physics || CollisionEngine.createDefaultPhysics();
+              return {
+                ...card,
+                isDragging: false,
+                physics: { ...physics, velocity },
+                isColliding: Math.abs(velocity.x) > 0.1 || Math.abs(velocity.y) > 0.1
+              };
+            }
+            return card;
+          })
+        );
+
+        // 如果有惯性速度，开始物理动画
+        if (Math.abs(velocity.x) > 0.1 || Math.abs(velocity.y) > 0.1) {
+          AnimationController.startCardAnimation(
+            draggedCard,
+            () => {
+              setWordCards(prev => {
+                const updated = handleCollisions(prev);
+                return updatePhysics(updated);
+              });
+            },
+            () => {
+              // 当所有卡片都停止运动时停止动画
+              const cards = wordCards.find(c => c.id === draggedCard);
+              return !cards?.isColliding && (!cards?.physics ||
+                (Math.abs(cards.physics.velocity.x) < 0.01 && Math.abs(cards.physics.velocity.y) < 0.01));
+            }
+          );
+        }
+      }
+
       setDraggedCard(null);
       setCollisionDetected(false);
     }
-    
+
     if (draggedPanel && definitionPanel) {
       // 移除面板拖动状态
       setDefinitionPanelWithLogging({
         ...definitionPanel,
         isDragging: false
       });
-      
+
       setDraggedPanel(false);
     }
-  }, [draggedCard, draggedPanel, definitionPanel, setDefinitionPanelWithLogging]);
+  }, [draggedCard, draggedPanel, definitionPanel, setDefinitionPanelWithLogging, wordCards, calculateDragVelocity, handleCollisions, updatePhysics]);
 
   // 添加全局鼠标事件监听
   useEffect(() => {
@@ -575,15 +866,18 @@ export default function FocusLearningPage() {
       definition,
       pronunciationData,
       isExpanded: false,
-      isAnimating: true
+      isAnimating: true,
+      physics: CollisionEngine.createDefaultPhysics(), // 添加物理属性
+      isColliding: false,
+      collisionScale: 1
     };
-    
+
     setWordCards(prev => [...prev, newCard]);
-    
+
     // 动画结束后移除动画标记
     setTimeout(() => {
-      setWordCards(prev => 
-        prev.map(card => 
+      setWordCards(prev =>
+        prev.map(card =>
           card.id === newCard.id ? { ...card, isAnimating: false } : card
         )
       );
@@ -651,38 +945,17 @@ export default function FocusLearningPage() {
   const handleWordCardClick = useCallback((cardId: string, event?: React.MouseEvent) => {
     const card = wordCards.find(c => c.id === cardId);
     if (!card || isTransitioning) {
-      logEvent('CLICK_EVENT', 'handleWordCardClick', {
-        cardId,
-        reason: 'card not found or transitioning',
-        isTransitioning
-      });
       return;
     }
 
-    logEvent('CLICK_EVENT', 'handleWordCardClick', {
-      cardId,
-      cardText: card.text,
-      hasDefinition: !!card.definition,
-      currentPanelId: definitionPanel?.wordId
-    });
-
     // 如果有展开的释义面板，先关闭
     if (definitionPanel && definitionPanel.wordId !== cardId) {
-      logEvent('PANEL_CLOSE', 'handleWordCardClick', {
-        reason: 'clicking different card',
-        oldPanelId: definitionPanel.wordId,
-        newCardId: cardId
-      });
       setDefinitionPanelWithLogging(null);
       return;
     }
 
     // 如果点击的是已展开的卡片，关闭释义面板
     if (definitionPanel && definitionPanel.wordId === cardId) {
-      logEvent('PANEL_CLOSE', 'handleWordCardClick', {
-        reason: 'clicking same card to close',
-        panelId: cardId
-      });
       setDefinitionPanelWithLogging(null);
       return;
     }
@@ -697,31 +970,13 @@ export default function FocusLearningPage() {
       isVisible: true,
       sourceCardPosition: card.position
     };
-    
-    logEvent('PANEL_OPEN', 'handleWordCardClick', {
-      cardId,
-      cardText: card.text,
-      hasDefinition: !!card.definition,
-      panelData: newDefinitionPanel
-    });
-    
+
     setDefinitionPanelWithLogging(newDefinitionPanel);
   }, [wordCards, definitionPanel, isTransitioning]);
 
   // 处理点击外部区域
   const handleOutsideClick = useCallback((event: MouseEvent) => {
-    logEvent('CLICK_EVENT', 'handleOutsideClick', {
-      eventType: 'outside_click',
-      target: (event.target as HTMLElement).tagName,
-      targetClass: (event.target as HTMLElement).className,
-      currentPanelId: definitionPanel?.wordId
-    });
-
     if (!containerRef.current || !containerRef.current.contains(event.target as Node)) {
-      logEvent('CLICK_EVENT', 'handleOutsideClick', {
-        reason: 'click outside container',
-        action: 'ignored'
-      });
       return;
     }
 
@@ -735,35 +990,14 @@ export default function FocusLearningPage() {
     const panelElement = document.querySelector('.definition-panel');
     const isClickInsidePanel = panelElement && panelElement.contains(target);
 
-    logEvent('CLICK_EVENT', 'handleOutsideClick', {
-      checks: {
-        isClickOnCard: !!isClickOnCard,
-        isClickOnPanel: !!isClickOnPanel,
-        isClickOnControls: !!isClickOnControls,
-        isClickInsidePanel: !!isClickInsidePanel,
-        hasDefinitionPanel: !!definitionPanel
-      }
-    });
-
     if (!isClickOnCard && !isClickOnPanel && !isClickOnControls && !isClickInsidePanel && definitionPanel) {
-      logEvent('PANEL_CLOSE', 'handleOutsideClick', {
-        reason: 'click outside valid elements',
-        panelId: definitionPanel.wordId,
-        willMoveToNextWord: true
-      });
-      
       // 关闭释义面板并添加新单词
       setDefinitionPanelWithLogging(null);
-      
+
       // 移动到下一个单词
       setTimeout(() => {
         nextWord();
       }, 300);
-    } else {
-      logEvent('CLICK_EVENT', 'handleOutsideClick', {
-        reason: 'click ignored - inside valid element',
-        action: 'panel_stays_open'
-      });
     }
   }, [definitionPanel, nextWord]);
 
@@ -780,11 +1014,6 @@ export default function FocusLearningPage() {
         event.preventDefault();
         // 关闭释义面板并添加新单词
         if (definitionPanel) {
-          logEvent('PANEL_CLOSE', 'keyboard', {
-            key: 'Space',
-            panelId: definitionPanel.wordId,
-            willMoveToNextWord: true
-          });
           setDefinitionPanelWithLogging(null);
           setTimeout(() => {
             nextWord();
@@ -792,17 +1021,10 @@ export default function FocusLearningPage() {
         }
       } else if (event.code === 'Escape') {
         // 关闭释义面板
-        if (definitionPanel) {
-          logEvent('PANEL_CLOSE', 'keyboard', {
-            key: 'Escape',
-            panelId: definitionPanel.wordId,
-            willMoveToNextWord: false
-          });
-        }
         setDefinitionPanelWithLogging(null);
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [definitionPanel, nextWord]);
@@ -1003,7 +1225,7 @@ export default function FocusLearningPage() {
       {wordCards.map(card => (
         <div
           key={card.id}
-          className={`word-card ${card.isAnimating ? 'word-card-appearing' : ''} ${definitionPanel?.wordId === card.id ? 'word-card-expanded' : ''} ${card.isDragging ? 'word-card-dragging' : ''}`}
+          className={`word-card ${card.isAnimating ? 'word-card-appearing' : ''} ${definitionPanel?.wordId === card.id ? 'word-card-expanded' : ''} ${card.isDragging ? 'word-card-dragging' : ''} ${card.isColliding ? 'word-card-colliding' : ''}`}
           style={{
             position: 'absolute',
             left: `${card.position.x}%`,
@@ -1011,7 +1233,9 @@ export default function FocusLearningPage() {
             width: `${settings.uiSettings.cardSize}px`,
             height: '48px',
             backgroundColor: 'var(--color-pure-white)',
-            border: card.isDragging ? '2px solid var(--color-focus-blue)' : (definitionPanel?.wordId === card.id ? '2px solid var(--color-focus-blue)' : '1px solid #E2E8F0'),
+            border: card.isDragging ? '2px solid var(--color-focus-blue)' :
+                   (card.isColliding ? '2px solid #FF6B6B' :
+                   (definitionPanel?.wordId === card.id ? '2px solid var(--color-focus-blue)' : '1px solid #E2E8F0')),
             borderRadius: '10px',
             display: 'flex',
             alignItems: 'center',
@@ -1021,13 +1245,14 @@ export default function FocusLearningPage() {
             fontWeight: '600',
             color: 'var(--color-ink-black)',
             fontFamily: "'Inter', 'Source Han Sans CN', sans-serif",
-            boxShadow: card.isDragging ? '0 8px 16px rgba(0, 0, 0, 0.15)' : '0 2px 4px rgba(0, 0, 0, 0.05)',
-            transition: card.isDragging ? 'none' : 'all 0.2s ease',
-            zIndex: card.isDragging ? 25 : (definitionPanel?.wordId === card.id ? 15 : 10),
+            boxShadow: card.isDragging ? '0 12px 24px rgba(0, 0, 0, 0.2)' :
+                      (card.isColliding ? '0 6px 12px rgba(255, 107, 107, 0.3)' : '0 2px 4px rgba(0, 0, 0, 0.05)'),
+            transition: card.isDragging || card.isColliding ? 'none' : 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            zIndex: card.isDragging ? 25 : (card.isColliding ? 20 : (definitionPanel?.wordId === card.id ? 15 : 10)),
             opacity: card.isAnimating ? 0 : (card.isDragging ? 0.8 : 1),
-            transform: `translate(-50%, -50%) ${card.isAnimating ? 'scale(0.8)' : 'scale(1)'} ${card.isDragging ? 'scale(1.05)' : ''}`,
+            transform: `translate(-50%, -50%) ${card.isAnimating ? 'scale(0.8)' : 'scale(1)'} ${card.isDragging ? 'scale(1.05)' : ''} ${card.collisionScale ? `scale(${card.collisionScale})` : ''}`,
             userSelect: 'none',
-            willChange: card.isDragging ? 'transform' : 'auto'
+            willChange: card.isDragging || card.isColliding ? 'transform, box-shadow' : 'auto'
           }}
           onMouseDown={(e) => handleMouseDown(e, card.id)}
           onClick={(e) => {
@@ -1093,18 +1318,9 @@ export default function FocusLearningPage() {
           className="definition-panel"
           onClick={(e) => {
             e.stopPropagation();
-            logEvent('CLICK_EVENT', 'definitionPanel', {
-              action: 'panel_clicked',
-              panelId: definitionPanel.wordId,
-              panelText: definitionPanel.wordText
-            });
           }} // 防止点击事件冒泡
           onMouseDown={(e) => {
             e.stopPropagation();
-            logEvent('CLICK_EVENT', 'definitionPanel', {
-              action: 'panel_mousedown',
-              panelId: definitionPanel.wordId
-            });
             handlePanelMouseDown(e);
           }}
           style={{
@@ -1131,22 +1347,7 @@ export default function FocusLearningPage() {
             cursor: definitionPanel.isDragging ? 'move' : 'default',
             transition: definitionPanel.isDragging ? 'none' : 'box-shadow 0.2s ease'
           }}
-          onAnimationStart={() => {
-            logEvent('VISIBILITY_CHECK', 'definitionPanel-animation-start', {
-              panelId: definitionPanel.wordId,
-              timestamp: Date.now()
-            });
-          }}
-          onAnimationEnd={() => {
-            logEvent('VISIBILITY_CHECK', 'definitionPanel-animation-end', {
-              panelId: definitionPanel.wordId,
-              timestamp: Date.now()
-            });
-            
-            // 动画结束后再次检查视觉状态
-            checkPanelVisibility(definitionPanel.wordId);
-          }}
-        >
+          >
           {/* 单词标题 */}
           <div style={{
             fontSize: `${settings.uiSettings.fontSize + 8}px`,
@@ -1362,7 +1563,15 @@ export default function FocusLearningPage() {
         .word-card-appearing {
           animation: wordCardAppear 0.2s ease-out forwards;
         }
-        
+
+        .word-card-colliding {
+          animation: collisionBounce 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+
+        .word-card-ripple {
+          animation: rippleEffect 0.6s ease-out;
+        }
+
         @keyframes wordCardAppear {
           0% {
             opacity: 0;
@@ -1371,6 +1580,33 @@ export default function FocusLearningPage() {
           100% {
             opacity: 1;
             transform: translate(-50%, -50%) scale(1);
+          }
+        }
+
+        @keyframes collisionBounce {
+          0% {
+            transform: translate(-50%, -50%) scale(1);
+          }
+          30% {
+            transform: translate(-50%, -50%) scale(0.85);
+          }
+          60% {
+            transform: translate(-50%, -50%) scale(1.1);
+          }
+          100% {
+            transform: translate(-50%, -50%) scale(1);
+          }
+        }
+
+        @keyframes rippleEffect {
+          0% {
+            box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.4);
+          }
+          70% {
+            box-shadow: 0 0 0 10px rgba(255, 107, 107, 0);
+          }
+          100% {
+            box-shadow: 0 0 0 0 rgba(255, 107, 107, 0);
           }
         }
       `}</style>
