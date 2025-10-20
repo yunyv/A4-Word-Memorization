@@ -9,7 +9,7 @@ import { InitializingProgress } from '@/components/learning/InitializingProgress
 import { WordSkeleton } from '@/components/learning/WordSkeleton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowLeft, ArrowRight, Check, X, Home, Settings } from 'lucide-react';
+import { ArrowLeft, Check, X, Home, Settings } from 'lucide-react';
 import { authFetch } from '@/hooks/useAuth';
 
 export default function LearningPage() {
@@ -63,7 +63,7 @@ export default function LearningPage() {
         try {
           const response = await authFetch(`/api/words/by-text?text=${learningState.currentWordText}`);
           const data = await response.json();
-          
+
           if (data.success && data.wordId) {
             setWordId(data.wordId);
           }
@@ -71,10 +71,34 @@ export default function LearningPage() {
           console.error('Error fetching word ID:', error);
         }
       };
-      
+
       fetchWordId();
     }
   }, [learningState.currentWordText]);
+
+  // 键盘事件监听 - 只允许使用空格键
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code === 'Space') {
+        event.preventDefault();
+
+        // 正在显示反馈时，不响应空格键
+        if (showFeedback) return;
+
+        if (sessionMode === 'test') {
+          // 测试模式：随机选择认识/不认识
+          const randomAnswer = Math.random() > 0.5;
+          handleAnswer(randomAnswer);
+        } else {
+          // 学习模式：直接进入下一个单词
+          nextWord();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showFeedback, sessionMode, handleAnswer, nextWord]);
 
   // 处理答案反馈
   const handleAnswer = (correct: boolean) => {

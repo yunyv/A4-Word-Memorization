@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useLearning } from '@/hooks/useLearning';
 import { useDefinitionSettings } from '@/hooks/useDefinitionSettings';
 import { Button } from '@/components/ui/button';
-import { Settings, Maximize2, Volume2 } from 'lucide-react';
+import { Settings, Maximize2, Volume2, Shuffle } from 'lucide-react';
 import { authFetch } from '@/hooks/useAuth';
 import { DefinitionSettingsButton } from '@/components/learning/DefinitionSettingsButton';
 import { DefinitionSettingsModal } from '@/components/learning/DefinitionSettingsModal';
@@ -1007,21 +1007,22 @@ export default function FocusLearningPage() {
     return () => document.removeEventListener('click', handleOutsideClick);
   }, [handleOutsideClick]);
 
-  // 键盘事件监听
+  // 键盘事件监听 - 只允许使用空格键
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.code === 'Space') {
         event.preventDefault();
-        // 关闭释义面板并添加新单词
+
+        // 如果有释义面板，关闭并进入下一个单词
         if (definitionPanel) {
           setDefinitionPanelWithLogging(null);
           setTimeout(() => {
             nextWord();
           }, 300);
+        } else {
+          // 没有释义面板时，直接进入下一个单词
+          nextWord();
         }
-      } else if (event.code === 'Escape') {
-        // 关闭释义面板
-        setDefinitionPanelWithLogging(null);
       }
     };
 
@@ -1053,6 +1054,36 @@ export default function FocusLearningPage() {
   const handleOpenSettings = () => {
     setIsSettingsModalOpen(true);
   };
+
+  // 打乱单词卡片位置
+  const shuffleWordCards = useCallback(() => {
+    setWordCards(prev => {
+      const shuffled = [...prev];
+      const newCards = [];
+
+      // 为每个卡片生成新的不重叠随机位置
+      for (let i = 0; i < shuffled.length; i++) {
+        const card = shuffled[i];
+        // 创建临时数组，包含当前卡片和其他已重新定位的卡片
+        const newPosition = generateRandomPosition(newCards);
+
+        newCards.push({
+          ...card,
+          position: newPosition,
+          isAnimating: true // 添加动画标记
+        });
+      }
+
+      return newCards;
+    });
+
+    // 300ms后移除动画标记
+    setTimeout(() => {
+      setWordCards(prev =>
+        prev.map(card => ({ ...card, isAnimating: false }))
+      );
+    }, 300);
+  }, [generateRandomPosition]);
 
   const handleCloseSettings = () => {
     setIsSettingsModalOpen(false);
@@ -1491,8 +1522,28 @@ export default function FocusLearningPage() {
         gap: '12px',
         zIndex: 30
       }}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={shuffleWordCards}
+          title="打乱单词位置"
+          style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: '50%',
+            backgroundColor: 'transparent',
+            border: 'none',
+            color: 'var(--color-rock-gray)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          <Shuffle className="h-5 w-5" />
+        </Button>
+
         <DefinitionSettingsButton onClick={handleOpenSettings} />
-        
+
         <Button
           variant="ghost"
           size="sm"

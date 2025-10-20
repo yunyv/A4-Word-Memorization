@@ -47,16 +47,13 @@ export const DefinitionSettingsModal: React.FC<DefinitionSettingsModalProps> = (
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      {/* 背景遮罩 */}
-      <div 
-        className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
-        onClick={onClose}
-      />
-      
+    <div className="fixed inset-0 z-50 overflow-y-auto" onClick={onClose}>
+      {/* 移除背景遮罩以支持实时预览 */}
+      {/* 点击模态框外部区域关闭 */}
+
       {/* 模态框容器 */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div 
+        <div
           className="relative w-full max-w-md bg-white rounded-xl shadow-2xl transform transition-all"
           onClick={(e) => e.stopPropagation()}
         >
