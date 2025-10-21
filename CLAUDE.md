@@ -51,7 +51,7 @@
 **3. 健壮性 (Robustness):**
 
 - **杜绝 `any`**: 在编写 TypeScript 代码时，必须使用明确的类型定义，禁止使用或隐式推导为 `any` 类型。
-- **实用错误处理 (Pragmatic Error Handling):** 核心目标是防止程序因**可预见的**错误而崩溃。
+- **实用错误处理 (Pragmatic Error Handling):** 在修复错误的功能或者是 bug 时，只需要修复错误即可，拒绝因为一个简单的错误而添加复杂的校验机制。
 - **聚焦边界条件 (Focused Boundary Conditions):** 避免对未来不确定的输入进行过度防御性编程。首先确保正常流程和最常见的异常流程能够稳定工作。
 
 **4. 简洁性 (Simplicity):**
