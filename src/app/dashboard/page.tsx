@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { WordlistsCard } from '@/components/dashboard/WordlistsCard';
@@ -11,7 +11,6 @@ import { LogOut, Settings, User } from 'lucide-react';
 export default function DashboardPage() {
   const router = useRouter();
   const { userState, logout } = useAuth();
-  const [selectedWordlistId, setSelectedWordlistId] = useState<number | undefined>();
 
   // 如果用户未认证，重定向到令牌页面
   useEffect(() => {
@@ -28,14 +27,12 @@ export default function DashboardPage() {
 
   // 处理开始学习
   const handleStartLearning = (wordlistId: number) => {
-    setSelectedWordlistId(wordlistId);
-    router.push(`/learning/focus?wordlistId=${wordlistId}&mode=new`);
+        router.push(`/learning/focus?wordlistId=${wordlistId}&mode=new`);
   };
 
   // 处理开始复习
   const handleStartReview = (wordlistId?: number) => {
-    setSelectedWordlistId(wordlistId);
-    const url = wordlistId
+        const url = wordlistId
       ? `/learning/focus?wordlistId=${wordlistId}&mode=review`
       : '/learning/focus?mode=review';
     router.push(url);
@@ -43,8 +40,7 @@ export default function DashboardPage() {
 
   // 处理开始测试
   const handleStartTest = (wordlistId: number) => {
-    setSelectedWordlistId(wordlistId);
-    router.push(`/test?wordlistId=${wordlistId}`);
+        router.push(`/test?wordlistId=${wordlistId}`);
   };
 
   // 处理设置

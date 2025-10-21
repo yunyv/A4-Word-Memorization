@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { DeleteWordlistResponse } from '@/types/wordlist';
+import { PrismaClient } from '@prisma/client';
 
 // 删除指定ID的词书
 export async function DELETE(
@@ -60,7 +61,7 @@ export async function DELETE(
     }
 
     // 使用事务删除词书及其所有相关数据
-    await db.$transaction(async (tx: any) => {
+    await db.$transaction(async (tx) => {
       // 删除词书条目关联
       await tx.wordlistEntry.deleteMany({
         where: { wordlistId }
@@ -166,7 +167,12 @@ export async function GET(
       id: wordlist.id,
       name: wordlist.name,
       createdAt: wordlist.createdAt.toISOString(),
-      words: wordlist.wordlistEntries.map((entry: any) => ({
+      words: wordlist.wordlistEntries.map((entry: {
+        word: {
+          id: number;
+          wordText: string;
+        };
+      }) => ({
         id: entry.word.id,
         wordText: entry.word.wordText
       }))

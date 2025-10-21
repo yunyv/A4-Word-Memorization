@@ -2,17 +2,93 @@
 
 import { PronunciationData, Sentence } from '@/lib/dictionary';
 
+// 单词释义数据接口
+export interface WordDefinitionData {
+  extractedContent?: string;
+  pronunciation?: string;
+  pronunciationData?: {
+    american?: {
+      phonetic: string;
+      audioUrl: string;
+    };
+    british?: {
+      phonetic: string;
+      audioUrl: string;
+    };
+  };
+  sentences?: Array<{
+    number: number;
+    english: string;
+    chinese: string;
+    audioUrl?: string;
+    source?: string;
+    highlightedWords?: Array<{
+      word: string;
+      className: string;
+    }>;
+  }>;
+  definitions?: {
+    basic: Array<{
+      partOfSpeech: string;
+      meaning: string;
+    }>;
+    web: Array<{
+      meaning: string;
+    }>;
+  };
+  authoritativeDefinitions?: Array<{
+    partOfSpeech: string;
+    definitions: Array<{
+      number: number;
+      chineseMeaning: string;
+      englishMeaning: string;
+      examples?: Array<{
+        english: string;
+        chinese: string;
+      }>;
+    }>;
+    idioms?: Array<{
+      number: number;
+      title: string;
+      meaning: string;
+      examples?: Array<{
+        english: string;
+        chinese: string;
+      }>;
+    }>;
+  }>;
+  bilingualDefinitions?: Array<{
+    partOfSpeech: string;
+    definitions: Array<{
+      number: number;
+      meaning: string;
+    }>;
+  }>;
+  englishDefinitions?: Array<{
+    partOfSpeech: string;
+    definitions: Array<{
+      number: number;
+      meaning: string;
+      linkedWords?: string[];
+    }>;
+  }>;
+  wordForms?: Array<{
+    form: string;
+    word: string;
+  }>;
+}
+
 export interface Word {
   id: number;
   word_text: string;
-  definition_data: any | null;
+  definition_data: WordDefinitionData | null;
 }
 
 export interface LearningState {
   sessionType: 'new' | 'review' | 'test' | null;
   wordQueue: string[]; // 存储待学习/复习的单词文本队列
   currentWordText: string | null; // 当前显示的单词文本
-  currentWordData: any | null; // 当前单词的完整数据（含释义）
+  currentWordData: WordDefinitionData | null; // 当前单词的完整数据（含释义）
   currentIndex: number; // 当前单词在队列中的索引
   status: 'idle' | 'active' | 'finished';
   wordlistId?: number; // 当前学习的词书ID
@@ -82,7 +158,7 @@ export interface SettingsPanelProps {
 // 单词卡片相关类型
 export interface WordCardProps {
   wordText: string;
-  wordDefinition: any | null;
+  wordDefinition: WordDefinitionData | null;
   isFlipped?: boolean;
   onFlip?: () => void;
   position?: {
@@ -93,13 +169,13 @@ export interface WordCardProps {
 
 export interface WordDisplayProps {
   wordText: string;
-  wordDefinition: any | null;
+  wordDefinition: WordDefinitionData | null;
   pronunciationData?: PronunciationData;
   sentences?: Sentence[];
   onClick?: () => void;
   fontSize?: number;
   autoPlayAudio?: boolean;
-  onAutoPlay?: (pronunciationData: PronunciationData | any) => void;
+  onAutoPlay?: (pronunciationData: PronunciationData) => void;
   onStopAuto?: () => void;
 }
 

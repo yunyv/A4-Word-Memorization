@@ -8,17 +8,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, User, Database, Info, RefreshCw } from 'lucide-react';
 import { authFetch } from '@/hooks/useAuth';
+import { Wordlist } from '@/types/wordlist';
+import { CacheStatus } from '@/types/common';
 
 export default function SettingsPage() {
   const router = useRouter();
   const { userState, logout } = useAuth();
   
-  const [wordlists, setWordlists] = useState<any[]>([]);
+  const [wordlists, setWordlists] = useState<Wordlist[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isClearingCache, setIsClearingCache] = useState(false);
   const [isPreloadingCache, setIsPreloadingCache] = useState(false);
   const [selectedWordlist, setSelectedWordlist] = useState<number | null>(null);
-  const [cacheStatus, setCacheStatus] = useState<any>(null);
+  const [cacheStatus, setCacheStatus] = useState<CacheStatus | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // 如果用户未认证，重定向到令牌页面

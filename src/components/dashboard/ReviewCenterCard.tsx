@@ -6,6 +6,15 @@ import { Button } from '@/components/ui/button';
 import { useLearning } from '@/hooks/useLearning';
 import { Calendar, Brain, BookOpen, FileText, TrendingUp } from 'lucide-react';
 
+// 学习统计接口
+interface LearningStats {
+  dueWords: number;
+  learnedWords: number;
+  totalWords: number;
+  completionRate: number;
+  stageStats?: Record<string, number>;
+}
+
 interface LearningStatsProps {
   wordlistId?: number;
   onStartReview: (wordlistId?: number) => void;
@@ -13,7 +22,7 @@ interface LearningStatsProps {
 }
 
 export function ReviewCenterCard({ wordlistId, onStartReview, onStartTest }: LearningStatsProps) {
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<LearningStats | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { getLearningProgressStats } = useLearning();
@@ -185,7 +194,7 @@ export function ReviewCenterCard({ wordlistId, onStartReview, onStartTest }: Lea
           <div className="mb-6">
             <h3 className="text-sm font-medium text-gray-700 mb-3">复习阶段分布</h3>
             <div className="space-y-2">
-              {Object.entries(stats.stageStats).map(([stage, count]: [string, any]) => (
+              {Object.entries(stats.stageStats).map(([stage, count]) => (
                 <div key={stage} className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">阶段 {stage}</span>
                   <div className="flex items-center">

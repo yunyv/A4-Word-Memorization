@@ -19,7 +19,8 @@ export const loadSettings = (): DefinitionSettings => {
         uiSettings: {
           fontSize: parsed.uiSettings?.fontSize || defaultSettings.uiSettings.fontSize,
           panelWidth: parsed.uiSettings?.panelWidth || defaultSettings.uiSettings.panelWidth,
-          cardSize: parsed.uiSettings?.cardSize || defaultSettings.uiSettings.cardSize
+          cardSize: parsed.uiSettings?.cardSize || defaultSettings.uiSettings.cardSize,
+          autoPlayAudio: parsed.uiSettings?.autoPlayAudio || defaultSettings.uiSettings.autoPlayAudio
         }
       };
     }

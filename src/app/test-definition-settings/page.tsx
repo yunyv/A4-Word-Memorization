@@ -4,6 +4,78 @@ import { useState } from 'react';
 import { DefinitionSettingsButton } from '@/components/learning/DefinitionSettingsButton';
 import { DefinitionSettingsModal } from '@/components/learning/DefinitionSettingsModal';
 import { useDefinitionSettings } from '@/hooks/useDefinitionSettings';
+import { WordDefinitionData } from '@/types/learning';
+
+// 权威释义内部类型
+interface AuthoritativeDef {
+  partOfSpeech: string;
+  definitions: AuthoritativeDefinitionItem[];
+  idioms?: AuthoritativeIdiom[];
+}
+
+// 双语释义内部类型
+interface BilingualDef {
+  partOfSpeech: string;
+  definitions: BilingualDefinitionItem[];
+}
+
+// 英英释义内部类型
+interface EnglishDef {
+  partOfSpeech: string;
+  definitions: EnglishDefinitionItem[];
+}
+
+// 权威释义的例句类型
+interface AuthoritativeExample {
+  english: string;
+  chinese: string;
+}
+
+// 权威释义的单个定义类型
+interface AuthoritativeDefinitionItem {
+  number: number;
+  chineseMeaning: string;
+  englishMeaning: string;
+  examples?: AuthoritativeExample[];
+}
+
+// 权威释义的习语例句类型
+interface AuthoritativeIdiomExample {
+  english: string;
+  chinese: string;
+}
+
+// 权威释义的习语类型
+interface AuthoritativeIdiom {
+  number: number;
+  title: string;
+  meaning: string;
+  examples?: AuthoritativeIdiomExample[];
+}
+
+// 双语释义的单个定义类型
+interface BilingualDefinitionItem {
+  number: number;
+  meaning: string;
+}
+
+// 英英释义的单个定义类型
+interface EnglishDefinitionItem {
+  number: number;
+  meaning: string;
+  linkedWords?: string[];
+}
+
+// 基本释义内部类型
+interface BasicDef {
+  partOfSpeech: string;
+  meaning: string;
+}
+
+// 网络释义内部类型
+interface WebDef {
+  meaning: string;
+}
 
 export default function TestDefinitionSettingsPage() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -111,7 +183,7 @@ export default function TestDefinitionSettingsPage() {
   };
 
   // 根据设置渲染释义内容
-  const renderDefinitionContent = (definition: any) => {
+  const renderDefinitionContent = (definition: WordDefinitionData) => {
     const enabledTypes = settings.definitionTypes.filter(type => type.enabled).sort((a, b) => a.order - b.order);
     
     return enabledTypes.map(type => {
@@ -120,10 +192,10 @@ export default function TestDefinitionSettingsPage() {
           return definition?.authoritativeDefinitions && definition.authoritativeDefinitions.length > 0 ? (
             <div key="authoritative" style={{ marginBottom: '16px' }}>
               <div style={{ fontSize: `${settings.uiSettings.fontSize}px`, fontWeight: '600', color: '#333', marginBottom: '8px' }}>权威英汉释义</div>
-              {definition.authoritativeDefinitions.map((authDef: any, index: number) => (
+              {definition.authoritativeDefinitions?.map((authDef: AuthoritativeDef, index: number) => (
                 <div key={index} style={{ marginBottom: '12px' }}>
                   <div style={{ fontWeight: '600', marginBottom: '4px', color: '#4285f4' }}>{authDef.partOfSpeech}</div>
-                  {authDef.definitions.map((defItem: any, defIndex: number) => (
+                  {authDef.definitions.map((defItem: AuthoritativeDefinitionItem, defIndex: number) => (
                     <div key={defIndex} style={{ marginLeft: '16px', marginBottom: '8px' }}>
                       <span style={{ fontWeight: '500' }}>{defItem.number}.</span>
                       <span style={{ marginLeft: '4px' }}>{defItem.chineseMeaning}</span>
@@ -132,7 +204,7 @@ export default function TestDefinitionSettingsPage() {
                       )}
                       {defItem.examples && defItem.examples.length > 0 && (
                         <div style={{ marginTop: '4px', marginLeft: '16px' }}>
-                          {defItem.examples.map((example: any, exIndex: number) => (
+                          {defItem.examples.map((example: AuthoritativeExample, exIndex: number) => (
                             <div key={exIndex} style={{ fontStyle: 'italic', fontSize: `${settings.uiSettings.fontSize - 2}px`, color: '#666', marginBottom: '4px' }}>
                               {example.english} {example.chinese && `(${example.chinese})`}
                             </div>
@@ -146,12 +218,12 @@ export default function TestDefinitionSettingsPage() {
                   {authDef.idioms && authDef.idioms.length > 0 && (
                     <div style={{ marginTop: '8px', marginLeft: '16px' }}>
                       <div style={{ fontWeight: '500', marginBottom: '4px', color: '#4285f4' }}>习语:</div>
-                      {authDef.idioms.map((idiom: any, idiomIndex: number) => (
+                      {authDef.idioms.map((idiom: AuthoritativeIdiom, idiomIndex: number) => (
                         <div key={idiomIndex} style={{ marginBottom: '6px' }}>
                           <span style={{ fontWeight: '500' }}>{idiom.number}. {idiom.title}</span> - {idiom.meaning}
                           {idiom.examples && idiom.examples.length > 0 && (
                             <div style={{ marginTop: '4px', marginLeft: '16px' }}>
-                              {idiom.examples.map((example: any, exIndex: number) => (
+                              {idiom.examples.map((example: AuthoritativeIdiomExample, exIndex: number) => (
                                 <div key={exIndex} style={{ fontStyle: 'italic', fontSize: `${settings.uiSettings.fontSize - 2}px`, color: '#666', marginBottom: '4px' }}>
                                   {example.english} {example.chinese && `(${example.chinese})`}
                                 </div>
@@ -171,10 +243,10 @@ export default function TestDefinitionSettingsPage() {
           return definition?.bilingualDefinitions && definition.bilingualDefinitions.length > 0 ? (
             <div key="bilingual" style={{ marginBottom: '16px' }}>
               <div style={{ fontSize: `${settings.uiSettings.fontSize}px`, fontWeight: '600', color: '#333', marginBottom: '8px' }}>英汉释义</div>
-              {definition.bilingualDefinitions.map((bilDef: any, index: number) => (
+              {definition.bilingualDefinitions.map((bilDef: BilingualDef, index: number) => (
                 <div key={index} style={{ marginBottom: '12px' }}>
                   <div style={{ fontWeight: '600', marginBottom: '4px', color: '#4285f4' }}>{bilDef.partOfSpeech}</div>
-                  {bilDef.definitions.map((defItem: any, defIndex: number) => (
+                  {bilDef.definitions.map((defItem: BilingualDefinitionItem, defIndex: number) => (
                     <div key={defIndex} style={{ marginLeft: '16px', marginBottom: '4px' }}>
                       <span style={{ fontWeight: '500' }}>{defItem.number}.</span> {defItem.meaning}
                     </div>
@@ -188,10 +260,10 @@ export default function TestDefinitionSettingsPage() {
           return definition?.englishDefinitions && definition.englishDefinitions.length > 0 ? (
             <div key="english" style={{ marginBottom: '16px' }}>
               <div style={{ fontSize: `${settings.uiSettings.fontSize}px`, fontWeight: '600', color: '#333', marginBottom: '8px' }}>英英释义</div>
-              {definition.englishDefinitions.map((engDef: any, index: number) => (
+              {definition.englishDefinitions.map((engDef: EnglishDef, index: number) => (
                 <div key={index} style={{ marginBottom: '12px' }}>
                   <div style={{ fontWeight: '600', marginBottom: '4px', color: '#4285f4' }}>{engDef.partOfSpeech}</div>
-                  {engDef.definitions.map((defItem: any, defIndex: number) => (
+                  {engDef.definitions.map((defItem: EnglishDefinitionItem, defIndex: number) => (
                     <div key={defIndex} style={{ marginLeft: '16px', marginBottom: '4px' }}>
                       <span style={{ fontWeight: '500' }}>{defItem.number}.</span> {defItem.meaning}
                       {defItem.linkedWords && defItem.linkedWords.length > 0 && (
@@ -210,7 +282,7 @@ export default function TestDefinitionSettingsPage() {
           return definition?.definitions?.basic && definition.definitions.basic.length > 0 ? (
             <div key="basic" style={{ marginBottom: '16px' }}>
               <div style={{ fontSize: `${settings.uiSettings.fontSize}px`, fontWeight: '600', color: '#333', marginBottom: '8px' }}>基本释义</div>
-              {definition.definitions.basic.map((def: any, index: number) => (
+              {definition.definitions.basic.map((def: BasicDef, index: number) => (
                 <div key={index} style={{ marginBottom: '8px' }}>
                   <span style={{ fontWeight: '600', color: '#4285f4' }}>{def.partOfSpeech}</span> {def.meaning}
                 </div>
@@ -222,7 +294,7 @@ export default function TestDefinitionSettingsPage() {
           return definition?.definitions?.web && definition.definitions.web.length > 0 ? (
             <div key="web" style={{ marginBottom: '16px' }}>
               <div style={{ fontSize: `${settings.uiSettings.fontSize}px`, fontWeight: '600', color: '#333', marginBottom: '8px' }}>网络释义</div>
-              {definition.definitions.web.map((def: any, index: number) => (
+              {definition.definitions.web.map((def: WebDef, index: number) => (
                 <div key={index} style={{ marginBottom: '8px', marginLeft: '16px' }}>
                   {def.meaning}
                 </div>

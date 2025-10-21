@@ -89,7 +89,80 @@ export interface WordWithDetails {
   id: number;
   wordText: string;
   pronunciation?: string;
-  definitionData?: any;
+  definitionData?: {
+    extractedContent?: string;
+    pronunciation?: string;
+    pronunciationData?: {
+      american?: {
+        phonetic: string;
+        audioUrl: string;
+      };
+      british?: {
+        phonetic: string;
+        audioUrl: string;
+      };
+    };
+    sentences?: Array<{
+      number: number;
+      english: string;
+      chinese: string;
+      audioUrl?: string;
+      source?: string;
+      highlightedWords?: Array<{
+        word: string;
+        className: string;
+      }>;
+    }>;
+    definitions?: {
+      basic: Array<{
+        partOfSpeech: string;
+        meaning: string;
+      }>;
+      web: Array<{
+        meaning: string;
+      }>;
+    };
+    authoritativeDefinitions?: Array<{
+      partOfSpeech: string;
+      definitions: Array<{
+        number: number;
+        chineseMeaning: string;
+        englishMeaning: string;
+        examples?: Array<{
+          english: string;
+          chinese: string;
+        }>;
+      }>;
+      idioms?: Array<{
+        number: number;
+        title: string;
+        meaning: string;
+        examples?: Array<{
+          english: string;
+          chinese: string;
+        }>;
+      }>;
+    }>;
+    bilingualDefinitions?: Array<{
+      partOfSpeech: string;
+      definitions: Array<{
+        number: number;
+        meaning: string;
+      }>;
+    }>;
+    englishDefinitions?: Array<{
+      partOfSpeech: string;
+      definitions: Array<{
+        number: number;
+        meaning: string;
+        linkedWords?: string[];
+      }>;
+    }>;
+    wordForms?: Array<{
+      form: string;
+      word: string;
+    }>;
+  };
   createdAt: Date;
   updatedAt: Date;
   pronunciations: WordPronunciation[];

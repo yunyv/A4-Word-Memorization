@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { DueWordsResponse, ReviewProgressResponse, LearningState } from '@/types/learning';
+import { DueWordsResponse, ReviewProgressResponse, LearningState, WordDefinitionData } from '@/types/learning';
 import { authFetch } from './useAuth';
 import { EBBINGHAUS_INTERVAL_MAP } from '@/types/learning';
 import { cachedFetch, generateCacheKey } from '@/lib/cacheUtils';
@@ -9,7 +9,7 @@ import { cachedFetch, generateCacheKey } from '@/lib/cacheUtils';
 // 单词数据缓存接口
 interface WordDataCache {
   [wordText: string]: {
-    data: any;
+    data: WordDefinitionData;
     timestamp: number;
     expiry: number;
   };
@@ -97,7 +97,7 @@ export function useLearning() {
   }, []);
 
   // 获取缓存的单词数据
-  const getCachedWordData = useCallback((wordText: string): any | null => {
+  const getCachedWordData = useCallback((wordText: string): WordDefinitionData | null => {
     if (isCacheValid(wordText)) {
       return wordDataCache.current[wordText].data;
     }
@@ -107,16 +107,16 @@ export function useLearning() {
   }, [isCacheValid]);
 
   // 设置单词数据缓存
-  const setCachedWordData = useCallback((wordText: string, data: any): void => {
+  const setCachedWordData = useCallback((wordText: string, data: WordDefinitionData): void => {
     wordDataCache.current[wordText] = {
       data,
       timestamp: Date.now(),
       expiry: CACHE_EXPIRY
     };
-  }, []);
+  }, [CACHE_EXPIRY]);
 
   // 获取单个单词数据（内部方法）
-  const fetchWordDataInternal = useCallback(async (wordText: string): Promise<any | null> => {
+  const fetchWordDataInternal = useCallback(async (wordText: string): Promise<WordDefinitionData | null> => {
     try {
       // 检查缓存
       const cached = getCachedWordData(wordText);
@@ -271,8 +271,8 @@ export function useLearning() {
         const data = await response.json();
 
         if (data.success) {
-          const words = data.wordlist.words.map((word: any) => word.wordText);
-          const shuffledWords = shuffleArray(words);
+          const words: string[] = data.wordlist.words.map((word: { wordText: string }) => word.wordText);
+          const shuffledWords: string[] = shuffleArray(words);
 
           setLearningState({
             sessionType,

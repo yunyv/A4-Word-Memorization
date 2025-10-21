@@ -1,6 +1,13 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { db } from './db';
+import type { PrismaClient, Prisma } from '@prisma/client';
+import type { WebsiteStructureTest } from '@/types/common';
+
+// Prisma 事务类型定义
+type PrismaTransaction = Omit<PrismaClient,
+  '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
+>;
 
 // 权威英汉释义结构
 export interface AuthoritativeDefinition {
@@ -112,6 +119,105 @@ export interface DictionaryResult {
     allContainers?: string[];
   };
   error?: string;
+}
+
+// 释义数据保存接口
+interface DefinitionsToSave {
+  basic: Array<{
+    partOfSpeech: string;
+    meaning: string;
+  }>;
+  web: Array<{
+    meaning: string;
+  }>;
+}
+
+// 发音数据保存接口
+interface PronunciationDataToSave {
+  american?: {
+    phonetic: string;
+    audioUrl: string;
+  };
+  british?: {
+    phonetic: string;
+    audioUrl: string;
+  };
+}
+
+// 保存数据的接口定义
+export interface WordDataToSave {
+  extractedContent?: string;
+  pronunciation?: string;
+  pronunciationData?: {
+    american?: {
+      phonetic: string;
+      audioUrl: string;
+    };
+    british?: {
+      phonetic: string;
+      audioUrl: string;
+    };
+  };
+  sentences?: Array<{
+    number: number;
+    english: string;
+    chinese: string;
+    audioUrl?: string;
+    source?: string;
+    highlightedWords?: Array<{
+      word: string;
+      className: string;
+    }>;
+  }>;
+  definitions?: {
+    basic: Array<{
+      partOfSpeech: string;
+      meaning: string;
+    }>;
+    web: Array<{
+      meaning: string;
+    }>;
+  };
+  authoritativeDefinitions?: Array<{
+    partOfSpeech: string;
+    definitions: Array<{
+      number: number;
+      chineseMeaning: string;
+      englishMeaning: string;
+      examples?: Array<{
+        english: string;
+        chinese: string;
+      }>;
+    }>;
+    idioms?: Array<{
+      number: number;
+      title: string;
+      meaning: string;
+      examples?: Array<{
+        english: string;
+        chinese: string;
+      }>;
+    }>;
+  }>;
+  bilingualDefinitions?: Array<{
+    partOfSpeech: string;
+    definitions: Array<{
+      number: number;
+      meaning: string;
+    }>;
+  }>;
+  englishDefinitions?: Array<{
+    partOfSpeech: string;
+    definitions: Array<{
+      number: number;
+      meaning: string;
+      linkedWords?: string[];
+    }>;
+  }>;
+  wordForms?: Array<{
+    form: string;
+    word: string;
+  }>;
 }
 
 export class DictionaryScraper {
@@ -236,17 +342,17 @@ export class DictionaryScraper {
       
       try {
         if (type === 'all' || type === 'authoritative') {
-          authoritativeDefinitions = this.extractAuthoritativeDefinitions($ as any);
+          authoritativeDefinitions = this.extractAuthoritativeDefinitions($);
           console.log('提取的权威英汉释义数量:', authoritativeDefinitions.length);
         }
         
         if (type === 'all' || type === 'bilingual') {
-          bilingualDefinitions = this.extractBilingualDefinitions($ as any);
+          bilingualDefinitions = this.extractBilingualDefinitions($);
           console.log('提取的英汉释义数量:', bilingualDefinitions.length);
         }
         
         if (type === 'all' || type === 'english') {
-          englishDefinitions = this.extractEnglishDefinitions($ as any);
+          englishDefinitions = this.extractEnglishDefinitions($);
           console.log('提取的英英释义数量:', englishDefinitions.length);
         }
       } catch (e) {
@@ -256,7 +362,7 @@ export class DictionaryScraper {
       // 提取音标和音频数据
       let pronunciationData: PronunciationData = {};
       try {
-        pronunciationData = this.extractPronunciationData($ as any);
+        pronunciationData = this.extractPronunciationData($);
         console.log('提取的音标数据数量:',
           (pronunciationData.american ? 1 : 0) + (pronunciationData.british ? 1 : 0));
       } catch (e) {
@@ -266,7 +372,7 @@ export class DictionaryScraper {
       // 提取例句数据
       let sentences: Sentence[] = [];
       try {
-        sentences = this.extractSentences($ as any);
+        sentences = this.extractSentences($);
         console.log('提取的例句数量:', sentences.length);
       } catch (e) {
         console.error('提取例句数据失败:', e);
@@ -367,7 +473,7 @@ export class DictionaryScraper {
   }
 
   // 提取权威英汉释义
-  private extractAuthoritativeDefinitions($: any): AuthoritativeDefinition[] {
+  private extractAuthoritativeDefinitions($: ReturnType<typeof cheerio.load>): AuthoritativeDefinition[] {
     const definitions: AuthoritativeDefinition[] = [];
     
     try {
@@ -388,7 +494,7 @@ export class DictionaryScraper {
       console.log(`找到权威英汉释义容器，包含 ${$container.find('.defeachseg').length} 个释义区块`);
       
       // 遍历每个词性区块
-      $container.find('.defeachseg').each((index: number, element: any) => {
+      $container.find('.defeachseg').each((index: number, element) => {
         const $seg = $(element);
         const $head = $seg.find('.defeachhead');
         let partOfSpeech = $head.find('.defpos').text().trim();
@@ -413,7 +519,7 @@ export class DictionaryScraper {
         };
         
         // 提取释义条目
-        $seg.find('.deflistitem').each((defIndex: number, defElement: any) => {
+        $seg.find('.deflistitem').each((defIndex: number, defElement) => {
           const $defItem = $(defElement);
           const $defBar = $defItem.find('.defitembar');
           const numberText = $defBar.find('.defnum').text().trim();
@@ -432,7 +538,12 @@ export class DictionaryScraper {
           console.log(`提取到权威释义 ${number}: 中文=${chineseMeaning}, 英文=${englishMeaning}`);
           
           if (chineseMeaning || englishMeaning) {
-            const definition: any = {
+            const definition: {
+              number: number;
+              chineseMeaning: string;
+              englishMeaning: string;
+              examples?: Array<{ english: string; chinese: string }>;
+            } = {
               number,
               chineseMeaning,
               englishMeaning
@@ -442,7 +553,7 @@ export class DictionaryScraper {
             const $examBar = $defItem.find('.exambar');
             if ($examBar.length > 0) {
               const examples: Array<{ english: string; chinese: string }> = [];
-              $examBar.find('.examlistitem').each((examIndex: number, examElement: any) => {
+              $examBar.find('.examlistitem').each((examIndex: number, examElement) => {
                 const $examItem = $(examElement).find('.examitem');
                 const english = $examItem.find('.examitmeval').text().trim();
                 const chinese = $examItem.find('.examitemname').text().trim();
@@ -465,7 +576,7 @@ export class DictionaryScraper {
         if ($idomBar.length > 0) {
           console.log(`找到习语区域，包含 ${$idomBar.find('.defitemtitlebar').length} 个习语`);
           const idioms: Array<{ number: number; title: string; meaning: string; examples?: Array<{ english: string; chinese: string }> }> = [];
-          $idomBar.find('.defitemtitlebar').each((idiomIndex: number, idiomElement: any) => {
+          $idomBar.find('.defitemtitlebar').each((idiomIndex: number, idiomElement) => {
             const $titleBar = $(idiomElement);
             const numberText = $titleBar.find('.defnum').text().trim();
             const number = parseInt(numberText) || idiomIndex + 1;
@@ -475,7 +586,7 @@ export class DictionaryScraper {
             
             // 查找对应的释义内容
             const $nextItems = $titleBar.nextUntil('.defitemtitlebar', '.defitembar');
-            $nextItems.each((itemIndex: number, itemElement: any) => {
+            $nextItems.each((itemIndex: number, itemElement) => {
               const $itemBar = $(itemElement);
               const $defItem = $itemBar.find('.defitem');
               let meaning = $defItem.find('.itemname').text().trim();
@@ -490,7 +601,12 @@ export class DictionaryScraper {
               console.log(`提取到习语释义: ${meaning} / ${englishMeaning}`);
               
               if (meaning || englishMeaning) {
-                const idiom: any = {
+                const idiom: {
+                  number: number;
+                  title: string;
+                  meaning: string;
+                  examples?: Array<{ english: string; chinese: string }>;
+                } = {
                   number,
                   title,
                   meaning: meaning || englishMeaning
@@ -500,7 +616,7 @@ export class DictionaryScraper {
                 const $examBar = $defItem.find('.exambar');
                 if ($examBar.length > 0) {
                   const examples: Array<{ english: string; chinese: string }> = [];
-                  $examBar.find('.examlistitem').each((examIndex: number, examElement: any) => {
+                  $examBar.find('.examlistitem').each((examIndex: number, examElement) => {
                     const $examItem = $(examElement).find('.examitem');
                     const english = $examItem.find('.examitmeval').text().trim();
                     const chinese = $examItem.find('.examitemname').text().trim();
@@ -540,7 +656,7 @@ export class DictionaryScraper {
   }
 
   // 提取英汉释义
-  private extractBilingualDefinitions($: any): BilingualDefinition[] {
+  private extractBilingualDefinitions($: ReturnType<typeof cheerio.load>): BilingualDefinition[] {
     const definitions: BilingualDefinition[] = [];
     
     try {
@@ -561,7 +677,7 @@ export class DictionaryScraper {
       console.log(`找到英汉释义容器，包含 ${$container.find('.client_def_bar').length} 个释义区块`);
       
       // 遍历每个词性区块
-      $container.find('.client_def_bar').each((index: number, element: any) => {
+      $container.find('.client_def_bar').each((index: number, element) => {
         const $bar = $(element);
         const $titleBar = $bar.find('.client_def_title_bar');
         const partOfSpeech = $titleBar.find('.client_def_title').text().trim();
@@ -607,7 +723,7 @@ export class DictionaryScraper {
             console.log(`从文本内容提取释义: ${meaningText}`);
           }
         } else {
-          $defItems.each((defIndex: number, defElement: any) => {
+          $defItems.each((defIndex: number, defElement) => {
             const $defItem = $(defElement);
             const numberText = $defItem.find('.client_def_list_word_num').text().trim();
             const number = parseInt(numberText) || defIndex + 1;
@@ -643,7 +759,7 @@ export class DictionaryScraper {
   }
 
   // 提取英英释义
-  private extractEnglishDefinitions($: any): EnglishDefinition[] {
+  private extractEnglishDefinitions($: ReturnType<typeof cheerio.load>): EnglishDefinition[] {
     const definitions: EnglishDefinition[] = [];
     
     try {
@@ -655,7 +771,7 @@ export class DictionaryScraper {
       }
 
       // 遍历每个词性区块
-      $container.find('.client_def_bar').each((index: number, element: any) => {
+      $container.find('.client_def_bar').each((index: number, element) => {
         const $bar = $(element);
         const $titleBar = $bar.find('.client_def_title_bar');
         const partOfSpeech = $titleBar.find('.client_def_title').text().trim();
@@ -668,7 +784,7 @@ export class DictionaryScraper {
         };
         
         // 提取释义条目
-        $bar.find('.client_def_list_item').each((defIndex: number, defElement: any) => {
+        $bar.find('.client_def_list_item').each((defIndex: number, defElement) => {
           const $defItem = $(defElement);
           const numberText = $defItem.find('.client_def_list_word_num').text().trim();
           const number = parseInt(numberText) || defIndex + 1;
@@ -678,7 +794,7 @@ export class DictionaryScraper {
           const meaningParts: string[] = [];
           const linkedWords: string[] = [];
           
-          $content.find('a.client_def_list_word_en').each((linkIndex: number, linkElement: any) => {
+          $content.find('a.client_def_list_word_en').each((linkIndex: number, linkElement) => {
             const $link = $(linkElement);
             const text = $link.text().trim();
             if (text) {
@@ -710,7 +826,7 @@ export class DictionaryScraper {
   }
 
   // 提取音标和音频数据
-  private extractPronunciationData($: any): PronunciationData {
+  private extractPronunciationData($: ReturnType<typeof cheerio.load>): PronunciationData {
     const pronunciationData: PronunciationData = {};
     
     try {
@@ -737,7 +853,7 @@ export class DictionaryScraper {
       console.log(`找到 ${$pronunciationLists.length} 个发音列表容器`);
       
       // 遍历每个发音列表
-      $pronunciationLists.each((index: number, element: any) => {
+      $pronunciationLists.each((index: number, element) => {
         const $list = $(element);
         const $phoneticElement = $list.find('.client_def_hd_pn');
         let phoneticText = $phoneticElement.text().trim();
@@ -824,7 +940,7 @@ export class DictionaryScraper {
   }
 
   // 提取例句数据
-  private extractSentences($: any): Sentence[] {
+  private extractSentences($: ReturnType<typeof cheerio.load>): Sentence[] {
     const sentences: Sentence[] = [];
     
     try {
@@ -837,7 +953,7 @@ export class DictionaryScraper {
       }
       
       // 遍历每个例句
-      $sentenceLists.each((index: number, element: any) => {
+      $sentenceLists.each((index: number, element) => {
         const $sentence = $(element);
         
         // 提取序号
@@ -863,7 +979,7 @@ export class DictionaryScraper {
         
         // 提取高亮的单词
         const highlightedWords: Array<{ word: string; className: string }> = [];
-        $sentence.find('.client_sentence_search, .client_sen_en_word, .client_sen_cn_word').each((wordIndex: number, wordElement: any) => {
+        $sentence.find('.client_sentence_search, .client_sen_en_word, .client_sen_cn_word').each((wordIndex: number, wordElement) => {
           const $wordElement = $(wordElement);
           const word = $wordElement.text().trim();
           const className = $wordElement.attr('class') || '';
@@ -895,14 +1011,14 @@ export class DictionaryScraper {
   }
 
   // 测试方法，用于验证网站结构
-  async testWebsiteStructure(word: string = 'hello'): Promise<any> {
+  async testWebsiteStructure(word: string = 'hello'): Promise<WebsiteStructureTest> {
     try {
       const url = `${this.baseUrl}?mkt=zh-CN&setLang=zh&form=BDVEHC&ClientVer=BDDTV3.5.1.4320&q=${encodeURIComponent(word)}`;
       const response = await axios.get(url, { headers: this.headers, timeout: 10000 });
       const $ = cheerio.load(response.data);
       
       // 分析页面结构
-      const structure = {
+      const structure: WebsiteStructureTest = {
         title: $('title').text(),
         hasContentContainer: $('#content_container').length > 0,
         hasSearchContainer: $('.client_search_container').length > 0,
@@ -910,9 +1026,9 @@ export class DictionaryScraper {
         hasLeftSideArea: $('.client_search_leftside_area').length > 0,
         hasSentenceArea: $('.client_search_sentence_area').length > 0,
         sentenceAreaDivs: $('.client_search_sentence_area div').length,
-        firstFewDivsContent: [] as string[],
+        firstFewDivsContent: [],
         bodyClasses: $('body').attr('class'),
-        allContainers: [] as string[]
+        allContainers: []
       };
       
       // 获取前几个div的内容用于调试
@@ -928,12 +1044,23 @@ export class DictionaryScraper {
       return structure;
     } catch (error) {
       console.error('测试网站结构时出错:', error);
-      return { error: error instanceof Error ? error.message : '未知错误' };
+      return {
+        title: '',
+        hasContentContainer: false,
+        hasSearchContainer: false,
+        hasSearchContent: false,
+        hasLeftSideArea: false,
+        hasSentenceArea: false,
+        sentenceAreaDivs: 0,
+        firstFewDivsContent: [],
+        allContainers: [],
+        error: error instanceof Error ? error.message : '未知错误'
+      };
     }
   }
 
   // 将爬取的数据保存到新的表结构中
-  async saveWordDataToTables(wordText: string, data: any): Promise<void> {
+  async saveWordDataToTables(wordText: string, data: WordDataToSave): Promise<void> {
     try {
       // 使用事务确保数据一致性
       await db.$transaction(async (tx) => {
@@ -941,12 +1068,12 @@ export class DictionaryScraper {
         const word = await tx.word.upsert({
           where: { wordText: wordText.toLowerCase() },
           update: {
-            definitionData: data, // 保留JSON数据作为备份
+            definitionData: data as Prisma.InputJsonValue, // 保留JSON数据作为备份
             updatedAt: new Date()
           },
           create: {
             wordText: wordText.toLowerCase(),
-            definitionData: data
+            definitionData: data as Prisma.InputJsonValue
           }
         });
 
@@ -998,7 +1125,7 @@ export class DictionaryScraper {
     }
   }
 
-  private async savePronunciationData(tx: any, wordId: number, pronunciationData: any): Promise<void> {
+  private async savePronunciationData(tx: PrismaTransaction, wordId: number, pronunciationData: PronunciationDataToSave): Promise<void> {
     // 美式发音
     if (pronunciationData.american) {
       await tx.$executeRaw`
@@ -1024,7 +1151,7 @@ export class DictionaryScraper {
     }
   }
 
-  private async saveDefinitionData(tx: any, wordId: number, definitions: any): Promise<void> {
+  private async saveDefinitionData(tx: PrismaTransaction, wordId: number, definitions: DefinitionsToSave): Promise<void> {
     // 基本释义
     if (definitions.basic && definitions.basic.length > 0) {
       for (let i = 0; i < definitions.basic.length; i++) {
@@ -1057,7 +1184,7 @@ export class DictionaryScraper {
     }
   }
 
-  private async saveAuthoritativeDefinitions(tx: any, wordId: number, authoritativeDefinitions: any[]): Promise<void> {
+  private async saveAuthoritativeDefinitions(tx: PrismaTransaction, wordId: number, authoritativeDefinitions: AuthoritativeDefinition[]): Promise<void> {
     for (const authDef of authoritativeDefinitions) {
       // 创建主释义记录
       const definition = await tx.wordDefinition.create({
@@ -1125,7 +1252,7 @@ export class DictionaryScraper {
     }
   }
 
-  private async saveBilingualDefinitions(tx: any, wordId: number, bilingualDefinitions: any[]): Promise<void> {
+  private async saveBilingualDefinitions(tx: PrismaTransaction, wordId: number, bilingualDefinitions: BilingualDefinition[]): Promise<void> {
     for (const bilDef of bilingualDefinitions) {
       const definition = await tx.wordDefinition.create({
         data: {
@@ -1150,7 +1277,7 @@ export class DictionaryScraper {
     }
   }
 
-  private async saveEnglishDefinitions(tx: any, wordId: number, englishDefinitions: any[]): Promise<void> {
+  private async saveEnglishDefinitions(tx: PrismaTransaction, wordId: number, englishDefinitions: EnglishDefinition[]): Promise<void> {
     for (const engDef of englishDefinitions) {
       // 创建释义条目
       for (const defItem of engDef.definitions) {
@@ -1168,7 +1295,7 @@ export class DictionaryScraper {
     }
   }
 
-  private async saveSentenceData(tx: any, wordId: number, sentences: any[]): Promise<void> {
+  private async saveSentenceData(tx: PrismaTransaction, wordId: number, sentences: Sentence[]): Promise<void> {
     for (const sentence of sentences) {
       await tx.wordSentence.create({
         data: {
@@ -1183,7 +1310,7 @@ export class DictionaryScraper {
     }
   }
 
-  private async saveWordForms(tx: any, wordId: number, wordForms: any[]): Promise<void> {
+  private async saveWordForms(tx: PrismaTransaction, wordId: number, wordForms: Array<{ form: string; word: string }>): Promise<void> {
     for (const wordForm of wordForms) {
       await tx.$executeRaw`
         INSERT INTO WordForms (word_id, form_type, form_word, created_at, updated_at)
@@ -1197,7 +1324,7 @@ export class DictionaryScraper {
 }
 
 // 数据验证函数，检查释义数据的完整性
-export function validateWordDataCompleteness(data: any): {
+export function validateWordDataCompleteness(data: WordDataToSave): {
   isComplete: boolean;
   missingFields: string[];
   issues: string[];
@@ -1298,12 +1425,13 @@ export function validateWordDataCompleteness(data: any): {
     (data.englishDefinitions && data.englishDefinitions.length > 0) ||
     (data.definitions && data.definitions.basic && data.definitions.basic.length > 0);
   
-  const hasCompletePronunciation =
+  const hasCompletePronunciation = Boolean(
     data.pronunciationData &&
     ((data.pronunciationData.american && data.pronunciationData.american.audioUrl) ||
-     (data.pronunciationData.british && data.pronunciationData.british.audioUrl));
-  
-  const isComplete = hasCompleteDefinitions && hasCompletePronunciation;
+     (data.pronunciationData.british && data.pronunciationData.british.audioUrl))
+  );
+
+  const isComplete = Boolean(hasCompleteDefinitions && hasCompletePronunciation);
   
   return {
     isComplete,

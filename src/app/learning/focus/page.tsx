@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useLearning } from '@/hooks/useLearning';
@@ -10,6 +10,7 @@ import { Settings, Maximize2, Volume2, Shuffle, X, LogOut } from 'lucide-react';
 import { authFetch } from '@/hooks/useAuth';
 import { DefinitionSettingsButton } from '@/components/learning/DefinitionSettingsButton';
 import { DefinitionSettingsModal } from '@/components/learning/DefinitionSettingsModal';
+import { WordDefinitionData } from '@/types/learning';
 
 
 // 物理属性接口
@@ -35,8 +36,8 @@ interface WordCard {
   id: string;
   text: string;
   position: { x: number; y: number }; // 百分比位置
-  definition?: any;
-  pronunciationData?: any;
+  definition?: WordDefinitionData | null;
+  pronunciationData?: WordDefinitionData['pronunciationData'];
   isExpanded: boolean;
   isAnimating: boolean;
   isDragging?: boolean;
@@ -50,8 +51,8 @@ interface DefinitionPanel {
   wordId: string;
   wordText: string;
   position: { x: number; y: number }; // 展开位置
-  definition: any;
-  pronunciationData?: any;
+  definition: WordDefinitionData | null | undefined;
+  pronunciationData?: WordDefinitionData['pronunciationData'];
   isVisible: boolean;
   sourceCardPosition: { x: number; y: number }; // 源卡片位置
   isDragging?: boolean; // 是否正在拖动
@@ -333,7 +334,8 @@ class AnimationController {
   }
 }
 
-export default function FocusLearningPage() {
+// 内部组件，处理 useSearchParams
+function FocusLearningContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { userState } = useAuth();
@@ -859,7 +861,7 @@ export default function FocusLearningPage() {
   }, [draggedCard, draggedPanel, handleMouseMove, handleMouseUp]);
 
   // 添加新单词卡片
-  const addNewWordCard = useCallback((wordText: string, definition?: any, pronunciationData?: any) => {
+  const addNewWordCard = useCallback((wordText: string, definition?: WordDefinitionData | null, pronunciationData?: WordDefinitionData['pronunciationData']) => {
     const position = generateRandomPosition(wordCards);
     const newCard: WordCard = {
       id: `word-${Date.now()}-${Math.random()}`,
@@ -887,7 +889,7 @@ export default function FocusLearningPage() {
   }, [wordCards, generateRandomPosition]);
 
   // 自动播放音频函数
-  const playAutoAudio = useCallback((pronunciationData: any) => {
+  const playAutoAudio = useCallback((pronunciationData: WordDefinitionData['pronunciationData']) => {
     if (!settings.uiSettings.autoPlayAudio || !pronunciationData) return;
 
     // 停止之前的音频
@@ -898,8 +900,7 @@ export default function FocusLearningPage() {
 
     // 获取音频URL
     const audioUrl = pronunciationData?.american?.audioUrl ||
-                     pronunciationData?.british?.audioUrl ||
-                     pronunciationData?.audioUrl;
+                     pronunciationData?.british?.audioUrl;
 
     if (!audioUrl) return;
 
@@ -997,7 +998,7 @@ export default function FocusLearningPage() {
             ? {
                 ...card,
                 definition: learningState.currentWordData,
-                pronunciationData: learningState.currentWordData.pronunciationData
+                pronunciationData: learningState.currentWordData?.pronunciationData
               }
             : card
         )
@@ -1207,19 +1208,20 @@ export default function FocusLearningPage() {
   };
 
   // 根据设置渲染释义内容
-  const renderDefinitionContent = (definition: any) => {
+  const renderDefinitionContent = (definition: WordDefinitionData | null | undefined) => {
+    if (!definition) return null;
     const enabledTypes = settings.definitionTypes.filter(type => type.enabled).sort((a, b) => a.order - b.order);
-    
+
     return enabledTypes.map(type => {
       switch (type.id) {
         case 'authoritative':
           return definition?.authoritativeDefinitions && definition.authoritativeDefinitions.length > 0 ? (
             <div key="authoritative" style={{ marginBottom: '16px' }}>
               <div style={{ fontSize: `${settings.uiSettings.fontSize}px`, fontWeight: '600', color: 'var(--color-ink-black)', marginBottom: '8px' }}>权威英汉释义</div>
-              {definition.authoritativeDefinitions.map((authDef: any, index: number) => (
+              {definition.authoritativeDefinitions.map((authDef, index: number) => (
                 <div key={index} style={{ marginBottom: '12px' }}>
                   <div style={{ fontWeight: '600', marginBottom: '4px', color: 'var(--color-focus-blue)' }}>{authDef.partOfSpeech}</div>
-                  {authDef.definitions.map((defItem: any, defIndex: number) => (
+                  {authDef.definitions.map((defItem, defIndex: number) => (
                     <div key={defIndex} style={{ marginLeft: '16px', marginBottom: '8px' }}>
                       <span style={{ fontWeight: '500' }}>{defItem.number}.</span>
                       <span style={{ marginLeft: '4px' }}>{defItem.chineseMeaning}</span>
@@ -1228,7 +1230,7 @@ export default function FocusLearningPage() {
                       )}
                       {defItem.examples && defItem.examples.length > 0 && (
                         <div style={{ marginTop: '4px', marginLeft: '16px' }}>
-                          {defItem.examples.map((example: any, exIndex: number) => (
+                          {defItem.examples.map((example, exIndex: number) => (
                             <div key={exIndex} style={{ fontStyle: 'italic', fontSize: `${settings.uiSettings.fontSize - 2}px`, color: 'var(--color-rock-gray)', marginBottom: '4px' }}>
                               {example.english} {example.chinese && `(${example.chinese})`}
                             </div>
@@ -1242,12 +1244,12 @@ export default function FocusLearningPage() {
                   {authDef.idioms && authDef.idioms.length > 0 && (
                     <div style={{ marginTop: '8px', marginLeft: '16px' }}>
                       <div style={{ fontWeight: '500', marginBottom: '4px', color: 'var(--color-focus-blue)' }}>习语:</div>
-                      {authDef.idioms.map((idiom: any, idiomIndex: number) => (
+                      {authDef.idioms.map((idiom, idiomIndex: number) => (
                         <div key={idiomIndex} style={{ marginBottom: '6px' }}>
                           <span style={{ fontWeight: '500' }}>{idiom.number}. {idiom.title}</span> - {idiom.meaning}
                           {idiom.examples && idiom.examples.length > 0 && (
                             <div style={{ marginTop: '4px', marginLeft: '16px' }}>
-                              {idiom.examples.map((example: any, exIndex: number) => (
+                              {idiom.examples.map((example, exIndex: number) => (
                                 <div key={exIndex} style={{ fontStyle: 'italic', fontSize: `${settings.uiSettings.fontSize - 2}px`, color: 'var(--color-rock-gray)', marginBottom: '4px' }}>
                                   {example.english} {example.chinese && `(${example.chinese})`}
                                 </div>
@@ -1267,10 +1269,10 @@ export default function FocusLearningPage() {
           return definition?.bilingualDefinitions && definition.bilingualDefinitions.length > 0 ? (
             <div key="bilingual" style={{ marginBottom: '16px' }}>
               <div style={{ fontSize: `${settings.uiSettings.fontSize}px`, fontWeight: '600', color: 'var(--color-ink-black)', marginBottom: '8px' }}>英汉释义</div>
-              {definition.bilingualDefinitions.map((bilDef: any, index: number) => (
+              {definition.bilingualDefinitions.map((bilDef, index: number) => (
                 <div key={index} style={{ marginBottom: '12px' }}>
                   <div style={{ fontWeight: '600', marginBottom: '4px', color: 'var(--color-focus-blue)' }}>{bilDef.partOfSpeech}</div>
-                  {bilDef.definitions.map((defItem: any, defIndex: number) => (
+                  {bilDef.definitions.map((defItem, defIndex: number) => (
                     <div key={defIndex} style={{ marginLeft: '16px', marginBottom: '4px' }}>
                       <span style={{ fontWeight: '500' }}>{defItem.number}.</span> {defItem.meaning}
                     </div>
@@ -1284,10 +1286,10 @@ export default function FocusLearningPage() {
           return definition?.englishDefinitions && definition.englishDefinitions.length > 0 ? (
             <div key="english" style={{ marginBottom: '16px' }}>
               <div style={{ fontSize: `${settings.uiSettings.fontSize}px`, fontWeight: '600', color: 'var(--color-ink-black)', marginBottom: '8px' }}>英英释义</div>
-              {definition.englishDefinitions.map((engDef: any, index: number) => (
+              {definition.englishDefinitions.map((engDef, index: number) => (
                 <div key={index} style={{ marginBottom: '12px' }}>
                   <div style={{ fontWeight: '600', marginBottom: '4px', color: 'var(--color-focus-blue)' }}>{engDef.partOfSpeech}</div>
-                  {engDef.definitions.map((defItem: any, defIndex: number) => (
+                  {engDef.definitions.map((defItem, defIndex: number) => (
                     <div key={defIndex} style={{ marginLeft: '16px', marginBottom: '4px' }}>
                       <span style={{ fontWeight: '500' }}>{defItem.number}.</span> {defItem.meaning}
                       {defItem.linkedWords && defItem.linkedWords.length > 0 && (
@@ -1306,7 +1308,7 @@ export default function FocusLearningPage() {
           return definition?.definitions?.basic && definition.definitions.basic.length > 0 ? (
             <div key="basic" style={{ marginBottom: '16px' }}>
               <div style={{ fontSize: `${settings.uiSettings.fontSize}px`, fontWeight: '600', color: 'var(--color-ink-black)', marginBottom: '8px' }}>基本释义</div>
-              {definition.definitions.basic.map((def: any, index: number) => (
+              {definition.definitions.basic.map((def, index: number) => (
                 <div key={index} style={{ marginBottom: '8px' }}>
                   <span style={{ fontWeight: '600', color: 'var(--color-focus-blue)' }}>{def.partOfSpeech}</span> {def.meaning}
                 </div>
@@ -1318,7 +1320,7 @@ export default function FocusLearningPage() {
           return definition?.definitions?.web && definition.definitions.web.length > 0 ? (
             <div key="web" style={{ marginBottom: '16px' }}>
               <div style={{ fontSize: `${settings.uiSettings.fontSize}px`, fontWeight: '600', color: 'var(--color-ink-black)', marginBottom: '8px' }}>网络释义</div>
-              {definition.definitions.web.map((def: any, index: number) => (
+              {definition.definitions.web.map((def, index: number) => (
                 <div key={index} style={{ marginBottom: '8px', marginLeft: '16px' }}>
                   {def.meaning}
                 </div>
@@ -1573,7 +1575,7 @@ export default function FocusLearningPage() {
               <div style={{ marginBottom: '16px' }}>
                 <div style={{ fontSize: `${settings.uiSettings.fontSize}px`, fontWeight: '600', color: 'var(--color-ink-black)', marginBottom: '8px' }}>词形变化</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginLeft: '16px' }}>
-                  {definitionPanel.definition.wordForms.map((form: any, index: number) => (
+                  {definitionPanel.definition.wordForms.map((form, index: number) => (
                     <div key={index} style={{
                       backgroundColor: 'var(--color-gray-100)',
                       padding: '4px 8px',
@@ -1591,7 +1593,7 @@ export default function FocusLearningPage() {
             {definitionPanel.definition?.sentences && definitionPanel.definition.sentences.length > 0 && (
               <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #E2E8F0' }}>
                 <div style={{ fontSize: `${settings.uiSettings.fontSize}px`, fontWeight: '600', color: 'var(--color-ink-black)', marginBottom: '8px' }}>例句</div>
-                {definitionPanel.definition.sentences.slice(0, 5).map((sentence: any, index: number) => (
+                {definitionPanel.definition.sentences.slice(0, 5).map((sentence, index: number) => (
                   <div key={index} style={{ marginBottom: '12px', fontStyle: 'italic' }}>
                     <div style={{ color: 'var(--color-ink-black)', marginBottom: '4px', fontSize: `${settings.uiSettings.fontSize}px` }}>{sentence.english}</div>
                     {sentence.chinese && (
@@ -2020,5 +2022,20 @@ export default function FocusLearningPage() {
         }
       `}</style>
     </div>
+  );
+}
+
+export default function FocusLearningPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--color-papyrus-white)' }}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderColor: 'var(--color-focus-blue)' }}></div>
+          <p className="mt-4" style={{ color: 'var(--color-rock-gray)' }}>正在加载...</p>
+        </div>
+      </div>
+    }>
+      <FocusLearningContent />
+    </Suspense>
   );
 }

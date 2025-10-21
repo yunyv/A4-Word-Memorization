@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { DueWordsResponse } from '@/types/learning';
+import { WordlistEntry, DatabaseWhereCondition } from '@/types/common';
 
 // 获取用户待复习的单词
 export async function GET(request: NextRequest) {
@@ -31,20 +32,30 @@ export async function GET(request: NextRequest) {
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 50;
 
     // 构建查询条件
-    const whereCondition: any = {
+    const whereCondition: {
+      userId: number;
+      nextReviewDate: {
+        lte: Date;
+      };
+      wordId?: { in: number[] };
+    } = {
       userId: user.id,
       nextReviewDate: {
         lte: new Date() // 小于或等于今天的日期
       }
     };
-    
+
     // 检查是否是新学习模式（通过查询参数判断）
     const isNewMode = searchParams.get('newMode') === 'true';
-    
+
     // 如果是新学习模式，优先获取复习阶段为0的单词
     if (isNewMode) {
       // 首先尝试获取复习阶段为0的单词，不限制nextReviewDate
-      const newWordsCondition: any = {
+      const newWordsCondition: {
+        userId: number;
+        reviewStage: number;
+        wordId?: { in: number[] };
+      } = {
         userId: user.id,
         reviewStage: 0
       };
@@ -75,7 +86,7 @@ export async function GET(request: NextRequest) {
           select: { wordId: true }
         });
 
-        const wordIds = wordlistEntries.map((entry: any) => entry.wordId);
+        const wordIds = wordlistEntries.map((entry: WordlistEntry) => entry.wordId);
         newWordsCondition.wordId = { in: wordIds };
       }
       
@@ -97,7 +108,7 @@ export async function GET(request: NextRequest) {
       
       // 如果有新单词，直接返回
       if (newWords.length > 0) {
-        const words = newWords.map((progress: any) => progress.word.wordText);
+        const words = newWords.map((progress: { word: { wordText: string } }) => progress.word.wordText);
         return NextResponse.json({
           success: true,
           words,
@@ -134,7 +145,7 @@ export async function GET(request: NextRequest) {
         select: { wordId: true }
       });
 
-      const wordIds = wordlistEntries.map((entry: any) => entry.wordId);
+      const wordIds = wordlistEntries.map((entry: WordlistEntry) => entry.wordId);
       whereCondition.wordId = { in: wordIds };
     }
 
@@ -155,7 +166,7 @@ export async function GET(request: NextRequest) {
     });
 
     // 提取单词文本
-    const words = dueWords.map((progress: any) => progress.word.wordText);
+    const words = dueWords.map((progress: { word: { wordText: string } }) => progress.word.wordText);
 
     return NextResponse.json({
       success: true,
@@ -202,7 +213,7 @@ export async function POST(request: NextRequest) {
     const { wordlistId } = body;
 
     // 构建查询条件
-    const whereCondition: any = {
+    const whereCondition: DatabaseWhereCondition = {
       userId: user.id
     };
 
@@ -232,7 +243,7 @@ export async function POST(request: NextRequest) {
         select: { wordId: true }
       });
 
-      const wordIds = wordlistEntries.map((entry: any) => entry.wordId);
+      const wordIds = wordlistEntries.map((entry: WordlistEntry) => entry.wordId);
       whereCondition.wordId = { in: wordIds };
     }
 
@@ -278,10 +289,10 @@ export async function POST(request: NextRequest) {
     });
 
     // 格式化按阶段统计的数据
-    const stageStats = progressByStage.reduce((acc: any, item: any) => {
+    const stageStats = progressByStage.reduce((acc: Record<number, number>, item: { reviewStage: number; _count: { reviewStage: number } }) => {
       acc[item.reviewStage] = item._count.reviewStage;
       return acc;
-    }, {});
+    }, {} as Record<number, number>);
 
     // 计算学习完成率
     const completionRate = totalWords > 0 ? Math.round((learnedWords / totalWords) * 100) : 0;

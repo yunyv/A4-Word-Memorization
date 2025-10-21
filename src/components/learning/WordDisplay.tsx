@@ -192,7 +192,7 @@ export function WordDisplay({
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">基本释义</h3>
               <ul className="space-y-1">
-                {displayDefinition.definitions.basic.map((def: any, index: number) => (
+                {displayDefinition.definitions.basic.map((def, index: number) => (
                   <li key={index} className="text-gray-700">
                     <span className="font-medium">{def.partOfSpeech}</span> {def.meaning}
                   </li>
@@ -206,7 +206,7 @@ export function WordDisplay({
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">网络释义</h3>
               <ul className="space-y-1">
-                {displayDefinition.definitions.web.map((def: any, index: number) => (
+                {displayDefinition.definitions.web.map((def, index: number) => (
                   <li key={index} className="text-gray-700">
                     {def.meaning}
                   </li>
@@ -219,11 +219,11 @@ export function WordDisplay({
           {displayDefinition.authoritativeDefinitions && displayDefinition.authoritativeDefinitions.length > 0 && (
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">权威英汉释义</h3>
-              {displayDefinition.authoritativeDefinitions.map((authDef: any, index: number) => (
+              {displayDefinition.authoritativeDefinitions.map((authDef, index: number) => (
                 <div key={index} className="mb-3">
                   <p className="font-medium text-gray-800">{authDef.partOfSpeech}</p>
                   <ul className="space-y-1 ml-4">
-                    {authDef.definitions.map((def: any, defIndex: number) => (
+                    {authDef.definitions.map((def, defIndex: number) => (
                       <li key={defIndex} className="text-gray-700">
                         <span className="font-medium">{def.number}. </span>
                         {def.chineseMeaning && <span>{def.chineseMeaning}</span>}
@@ -237,7 +237,7 @@ export function WordDisplay({
                     <div className="mt-2 ml-4">
                       <p className="font-medium text-gray-800">习语:</p>
                       <ul className="space-y-1">
-                        {authDef.idioms.map((idiom: any, idiomIndex: number) => (
+                        {authDef.idioms.map((idiom, idiomIndex: number) => (
                           <li key={idiomIndex} className="text-gray-700">
                             <span className="font-medium">{idiom.number}. {idiom.title}</span> - {idiom.meaning}
                           </li>
@@ -254,11 +254,11 @@ export function WordDisplay({
           {displayDefinition.bilingualDefinitions && displayDefinition.bilingualDefinitions.length > 0 && (
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">英汉释义</h3>
-              {displayDefinition.bilingualDefinitions.map((bilDef: any, index: number) => (
+              {displayDefinition.bilingualDefinitions.map((bilDef, index: number) => (
                 <div key={index} className="mb-3">
                   <p className="font-medium text-gray-800">{bilDef.partOfSpeech}</p>
                   <ul className="space-y-1 ml-4">
-                    {bilDef.definitions.map((def: any, defIndex: number) => (
+                    {bilDef.definitions.map((def, defIndex: number) => (
                       <li key={defIndex} className="text-gray-700">
                         <span className="font-medium">{def.number}. </span>
                         {def.meaning}
@@ -274,11 +274,11 @@ export function WordDisplay({
           {displayDefinition.englishDefinitions && displayDefinition.englishDefinitions.length > 0 && (
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">英英释义</h3>
-              {displayDefinition.englishDefinitions.map((engDef: any, index: number) => (
+              {displayDefinition.englishDefinitions.map((engDef, index: number) => (
                 <div key={index} className="mb-3">
                   <p className="font-medium text-gray-800">{engDef.partOfSpeech}</p>
                   <ul className="space-y-1 ml-4">
-                    {engDef.definitions.map((def: any, defIndex: number) => (
+                    {engDef.definitions.map((def, defIndex: number) => (
                       <li key={defIndex} className="text-gray-700">
                         <span className="font-medium">{def.number}. </span>
                         {def.meaning}
@@ -295,7 +295,7 @@ export function WordDisplay({
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">词形变化</h3>
               <div className="flex flex-wrap gap-2">
-                {displayDefinition.wordForms.map((form: any, index: number) => (
+                {displayDefinition.wordForms.map((form, index: number) => (
                   <span key={index} className="bg-gray-100 px-2 py-1 rounded text-sm">
                     {form.form}: {form.word}
                   </span>
@@ -309,7 +309,7 @@ export function WordDisplay({
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">例句</h3>
               <ul className="space-y-3">
-                {displaySentences.slice(0, 3).map((sentence: any, index: number) => (
+                {displaySentences.slice(0, 3).map((sentence, index: number) => (
                   <li key={index} className="text-gray-700 border-l-2 border-blue-200 pl-3">
                     <p className="italic">{sentence.english}</p>
                     {sentence.chinese && (
@@ -325,7 +325,7 @@ export function WordDisplay({
       
       {/* 提示文字 */}
       {!showDefinition && (
-        <p className="text-sm text-gray-500 mt-4">点击单词或"显示释义"按钮查看释义</p>
+        <p className="text-sm text-gray-500 mt-4">点击单词或&ldquo;显示释义&rdquo;按钮查看释义</p>
       )}
     </div>
   );

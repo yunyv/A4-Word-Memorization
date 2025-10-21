@@ -6,7 +6,7 @@ interface CacheItem<T> {
 }
 
 class MemoryCache {
-  private cache = new Map<string, CacheItem<any>>();
+  private cache = new Map<string, CacheItem<unknown>>();
   
   // 设置缓存
   set<T>(key: string, data: T, ttl: number = 5 * 60 * 1000): void { // 默认5分钟
@@ -84,7 +84,7 @@ export async function cachedFetch<T>(
 }
 
 // 生成缓存键的辅助函数
-export function generateCacheKey(prefix: string, params: Record<string, any>): string {
+export function generateCacheKey(prefix: string, params: Record<string, unknown>): string {
   const sortedParams = Object.keys(params)
     .sort()
     .map(key => `${key}:${params[key]}`)
@@ -162,7 +162,6 @@ export async function getWordlistCacheStatus(wordlistId: number) {
 // 清理过期缓存
 export async function cleanupExpiredCache(daysOld: number = 30) {
   try {
-    const cutoffTime = Date.now() - (daysOld * 24 * 60 * 60 * 1000);
     let cleanedCount = 0;
     
     // 由于我们的缓存实现不存储所有键的元数据，

@@ -172,7 +172,10 @@ export async function GET(request: NextRequest) {
     const wordlistId = searchParams.get('wordlistId');
 
     // 构建查询条件
-    const whereCondition: any = {
+    const whereCondition: {
+      userId: number;
+      wordId?: { in: number[] };
+    } = {
       userId: user.id
     };
 
@@ -202,7 +205,7 @@ export async function GET(request: NextRequest) {
         select: { wordId: true }
       });
 
-      const wordIds = wordlistEntries.map((entry: any) => entry.wordId);
+      const wordIds = wordlistEntries.map((entry: { wordId: number }) => entry.wordId);
       whereCondition.wordId = { in: wordIds };
     }
 

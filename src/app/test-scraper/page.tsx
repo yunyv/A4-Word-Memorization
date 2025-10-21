@@ -3,13 +3,104 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ScraperResult } from '@/types/common';
 
-interface ScraperResult {
-  success: boolean;
+// 发音数据接口
+interface PronunciationData {
+  american?: {
+    phonetic: string;
+    audioUrl: string;
+  };
+  british?: {
+    phonetic: string;
+    audioUrl: string;
+  };
+}
+
+// 释义数据接口
+interface Definitions {
+  basic?: Array<{
+    partOfSpeech: string;
+    meaning: string;
+  }>;
+  web?: Array<{
+    meaning: string;
+  }>;
+}
+
+// 权威释义的例句接口
+interface AuthoritativeExample {
+  english: string;
+  chinese: string;
+}
+
+// 权威释义的单个定义接口
+interface AuthoritativeDefinitionItem {
+  number: number;
+  chineseMeaning: string;
+  englishMeaning: string;
+  examples?: AuthoritativeExample[];
+}
+
+// 权威释义的习语例句接口
+interface AuthoritativeIdiomExample {
+  english: string;
+  chinese: string;
+}
+
+// 权威释义的习语接口
+interface AuthoritativeIdiom {
+  number: number;
+  title: string;
+  meaning: string;
+  examples?: AuthoritativeIdiomExample[];
+}
+
+// 权威释义接口
+interface AuthoritativeDef {
+  partOfSpeech: string;
+  definitions?: AuthoritativeDefinitionItem[];
+  idioms?: AuthoritativeIdiom[];
+}
+
+// 双语释义的单个定义接口
+interface BilingualDefinitionItem {
+  number: number;
+  meaning: string;
+}
+
+// 双语释义接口
+interface BilingualDef {
+  partOfSpeech: string;
+  definitions?: BilingualDefinitionItem[];
+}
+
+// 英英释义的单个定义接口
+interface EnglishDefinitionItem {
+  number: number;
+  meaning: string;
+  linkedWords?: string[];
+}
+
+// 英英释义接口
+interface EnglishDef {
+  partOfSpeech: string;
+  definitions?: EnglishDefinitionItem[];
+}
+
+// 句子接口
+interface Sentence {
+  number: number;
+  english: string;
+  chinese: string;
+  audioUrl?: string;
+  source?: string;
+}
+
+// 词形变化接口
+interface WordForm {
+  form: string;
   word: string;
-  requestedType?: string;
-  data?: any;
-  error?: string;
 }
 
 export default function ScraperTestPage() {
@@ -63,7 +154,7 @@ export default function ScraperTestPage() {
     }
   };
 
-  const renderPronunciationData = (pronunciationData: any) => {
+  const renderPronunciationData = (pronunciationData: PronunciationData | undefined) => {
     if (!pronunciationData) return <div>无音标数据</div>;
     
     return (
@@ -82,8 +173,10 @@ export default function ScraperTestPage() {
                   size="sm" 
                   style={{ marginLeft: '8px' }}
                   onClick={() => {
-                    const audio = new Audio(pronunciationData.american.audioUrl);
-                    audio.play().catch(e => console.error('播放失败:', e));
+                    if (pronunciationData.american?.audioUrl) {
+                      const audio = new Audio(pronunciationData.american.audioUrl);
+                      audio.play().catch(e => console.error('播放失败:', e));
+                    }
                   }}
                 >
                   播放
@@ -105,8 +198,10 @@ export default function ScraperTestPage() {
                   size="sm" 
                   style={{ marginLeft: '8px' }}
                   onClick={() => {
-                    const audio = new Audio(pronunciationData.british.audioUrl);
-                    audio.play().catch(e => console.error('播放失败:', e));
+                    if (pronunciationData.british?.audioUrl) {
+                      const audio = new Audio(pronunciationData.british.audioUrl);
+                      audio.play().catch(e => console.error('播放失败:', e));
+                    }
                   }}
                 >
                   播放
@@ -119,7 +214,7 @@ export default function ScraperTestPage() {
     );
   };
 
-  const renderDefinitions = (definitions: any) => {
+  const renderDefinitions = (definitions: Definitions | undefined) => {
     if (!definitions) return <div>无释义数据</div>;
     
     return (
@@ -130,7 +225,7 @@ export default function ScraperTestPage() {
         {definitions.basic && definitions.basic.length > 0 && (
           <div style={{ marginBottom: '12px' }}>
             <h4>基本释义 ({definitions.basic.length}条)</h4>
-            {definitions.basic.map((def: any, index: number) => (
+            {definitions.basic.map((def, index: number) => (
               <div key={index} style={{ marginBottom: '4px', marginLeft: '16px' }}>
                 <strong>{def.partOfSpeech}</strong> {def.meaning}
               </div>
@@ -142,7 +237,7 @@ export default function ScraperTestPage() {
         {definitions.web && definitions.web.length > 0 && (
           <div style={{ marginBottom: '12px' }}>
             <h4>网络释义 ({definitions.web.length}条)</h4>
-            {definitions.web.map((def: any, index: number) => (
+            {definitions.web.map((def, index: number) => (
               <div key={index} style={{ marginBottom: '4px', marginLeft: '16px' }}>
                 {def.meaning}
               </div>
@@ -153,26 +248,26 @@ export default function ScraperTestPage() {
     );
   };
 
-  const renderAuthoritativeDefinitions = (definitions: any[]) => {
+  const renderAuthoritativeDefinitions = (definitions: AuthoritativeDef[] | undefined) => {
     if (!definitions || definitions.length === 0) return <div>无权威英汉释义</div>;
     
     return (
       <div style={{ marginBottom: '16px' }}>
         <h3>权威英汉释义 ({definitions.length}条)</h3>
-        {definitions.map((authDef: any, index: number) => (
+        {definitions.map((authDef: AuthoritativeDef, index: number) => (
           <div key={index} style={{ marginBottom: '12px', border: '1px solid #e0e0e0', padding: '8px' }}>
             <h4>{authDef.partOfSpeech}</h4>
             {authDef.definitions && authDef.definitions.length > 0 && (
               <div>
                 <h5>释义 ({authDef.definitions.length}条)</h5>
-                {authDef.definitions.map((defItem: any, defIndex: number) => (
+                {authDef.definitions.map((defItem: AuthoritativeDefinitionItem, defIndex: number) => (
                   <div key={defIndex} style={{ marginBottom: '4px', marginLeft: '16px' }}>
                     <strong>{defItem.number}.</strong> {defItem.chineseMeaning}
                     {defItem.englishMeaning && <span> ({defItem.englishMeaning})</span>}
                     {defItem.examples && defItem.examples.length > 0 && (
                       <div style={{ marginLeft: '16px', fontSize: '14px', color: '#666' }}>
                         <h6>例句:</h6>
-                        {defItem.examples.map((example: any, exIndex: number) => (
+                        {defItem.examples.map((example: AuthoritativeExample, exIndex: number) => (
                           <div key={exIndex} style={{ fontStyle: 'italic' }}>
                             {example.english} {example.chinese && `(${example.chinese})`}
                           </div>
@@ -187,13 +282,13 @@ export default function ScraperTestPage() {
             {authDef.idioms && authDef.idioms.length > 0 && (
               <div>
                 <h5>习语 ({authDef.idioms.length}条)</h5>
-                {authDef.idioms.map((idiom: any, idiomIndex: number) => (
+                {authDef.idioms.map((idiom: AuthoritativeIdiom, idiomIndex: number) => (
                   <div key={idiomIndex} style={{ marginBottom: '4px', marginLeft: '16px' }}>
                     <strong>{idiom.number}. {idiom.title}</strong> - {idiom.meaning}
                     {idiom.examples && idiom.examples.length > 0 && (
                       <div style={{ marginLeft: '16px', fontSize: '14px', color: '#666' }}>
                         <h6>例句:</h6>
-                        {idiom.examples.map((example: any, exIndex: number) => (
+                        {idiom.examples.map((example: AuthoritativeIdiomExample, exIndex: number) => (
                           <div key={exIndex} style={{ fontStyle: 'italic' }}>
                             {example.english} {example.chinese && `(${example.chinese})`}
                           </div>
@@ -210,18 +305,18 @@ export default function ScraperTestPage() {
     );
   };
 
-  const renderBilingualDefinitions = (definitions: any[]) => {
+  const renderBilingualDefinitions = (definitions: BilingualDef[] | undefined) => {
     if (!definitions || definitions.length === 0) return <div>无英汉释义</div>;
     
     return (
       <div style={{ marginBottom: '16px' }}>
         <h3>英汉释义 ({definitions.length}条)</h3>
-        {definitions.map((bilDef: any, index: number) => (
+        {definitions.map((bilDef: BilingualDef, index: number) => (
           <div key={index} style={{ marginBottom: '12px', border: '1px solid #e0e0e0', padding: '8px' }}>
             <h4>{bilDef.partOfSpeech}</h4>
             {bilDef.definitions && bilDef.definitions.length > 0 && (
               <div>
-                {bilDef.definitions.map((defItem: any, defIndex: number) => (
+                {bilDef.definitions.map((defItem: BilingualDefinitionItem, defIndex: number) => (
                   <div key={defIndex} style={{ marginBottom: '4px', marginLeft: '16px' }}>
                     <strong>{defItem.number}.</strong> {defItem.meaning}
                   </div>
@@ -234,18 +329,18 @@ export default function ScraperTestPage() {
     );
   };
 
-  const renderEnglishDefinitions = (definitions: any[]) => {
+  const renderEnglishDefinitions = (definitions: EnglishDef[] | undefined) => {
     if (!definitions || definitions.length === 0) return <div>无英英释义</div>;
     
     return (
       <div style={{ marginBottom: '16px' }}>
         <h3>英英释义 ({definitions.length}条)</h3>
-        {definitions.map((engDef: any, index: number) => (
+        {definitions.map((engDef: EnglishDef, index: number) => (
           <div key={index} style={{ marginBottom: '12px', border: '1px solid #e0e0e0', padding: '8px' }}>
             <h4>{engDef.partOfSpeech}</h4>
             {engDef.definitions && engDef.definitions.length > 0 && (
               <div>
-                {engDef.definitions.map((defItem: any, defIndex: number) => (
+                {engDef.definitions.map((defItem: EnglishDefinitionItem, defIndex: number) => (
                   <div key={defIndex} style={{ marginBottom: '4px', marginLeft: '16px' }}>
                     <strong>{defItem.number}.</strong> {defItem.meaning}
                     {defItem.linkedWords && defItem.linkedWords.length > 0 && (
@@ -263,13 +358,13 @@ export default function ScraperTestPage() {
     );
   };
 
-  const renderSentences = (sentences: any[]) => {
+  const renderSentences = (sentences: Sentence[] | undefined) => {
     if (!sentences || sentences.length === 0) return <div>无例句</div>;
     
     return (
       <div style={{ marginBottom: '16px' }}>
         <h3>例句 ({sentences.length}条)</h3>
-        {sentences.map((sentence: any, index: number) => (
+        {sentences.map((sentence: Sentence, index: number) => (
           <div key={index} style={{ marginBottom: '8px', border: '1px solid #e0e0e0', padding: '8px' }}>
             <div style={{ fontStyle: 'italic' }}>{sentence.english}</div>
             {sentence.chinese && <div style={{ color: '#666' }}>{sentence.chinese}</div>}
@@ -298,14 +393,14 @@ export default function ScraperTestPage() {
     );
   };
 
-  const renderWordForms = (wordForms: any[]) => {
+  const renderWordForms = (wordForms: WordForm[] | undefined) => {
     if (!wordForms || wordForms.length === 0) return <div>无词形变化</div>;
     
     return (
       <div style={{ marginBottom: '16px' }}>
         <h3>词形变化 ({wordForms.length}条)</h3>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-          {wordForms.map((form: any, index: number) => (
+          {wordForms.map((form: WordForm, index: number) => (
             <div key={index} style={{
               backgroundColor: '#f0f0f0',
               padding: '4px 8px',
@@ -335,7 +430,7 @@ export default function ScraperTestPage() {
         
         <select
           value={type}
-          onChange={(e) => setType(e.target.value as any)}
+          onChange={(e) => setType(e.target.value as 'all' | 'authoritative' | 'bilingual' | 'english')}
           style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
         >
           <option value="all">全部</option>

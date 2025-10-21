@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { UserState, TokenValidationResponse, AuthError } from '@/types/auth';
 
 interface AuthContextType {
@@ -27,25 +27,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [error, setError] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
-  // 确保组件只在客户端挂载后才执行
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  // 从localStorage恢复认证状态
-  useEffect(() => {
-    if (!isMounted) return;
-    
-    const token = localStorage.getItem('auth-token');
-    if (token) {
-      validateToken(token);
-    } else {
-      setUserState(prev => ({ ...prev, status: 'idle' }));
-    }
-  }, [isMounted]);
-
   // 验证令牌
-  const validateToken = async (token: string) => {
+  const validateToken = useCallback(async (token: string) => {
     setIsLoading(true);
     setError(null);
     setUserState(prev => ({ ...prev, status: 'loading' }));
@@ -101,7 +84,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [isMounted, setUserState, setIsLoading, setError]);
+
+  // 确保组件只在客户端挂载后才执行
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // 从localStorage恢复认证状态
+  useEffect(() => {
+    if (!isMounted) return;
+
+    const token = localStorage.getItem('auth-token');
+    if (token) {
+      validateToken(token);
+    } else {
+      setUserState(prev => ({ ...prev, status: 'idle' }));
+    }
+  }, [isMounted, validateToken]);
 
   // 登录函数
   const login = async (token: string): Promise<boolean> => {

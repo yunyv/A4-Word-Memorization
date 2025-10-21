@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
+import { WordDefinitionData } from '@/types/learning';
 
 interface WordBubbleProps {
   word: {
     id: number;
     text: string;
-    definition?: any;
-    pronunciationData?: any;
+    definition?: WordDefinitionData;
+    pronunciationData?: WordDefinitionData['pronunciationData'];
     isAnimating?: boolean;
   };
   isCentral: boolean;
@@ -116,7 +117,7 @@ export function WordBubble({
               {/* 基本释义 */}
               {word.definition.definitions && word.definition.definitions.basic && word.definition.definitions.basic.length > 0 && (
                 <div className="mb-3">
-                  {word.definition.definitions.basic.map((def: any, index: number) => (
+                  {word.definition.definitions.basic.map((def, index: number) => (
                     <div key={index} className="text-sm">
                       <span className="font-medium">{def.partOfSpeech}</span> {def.meaning}
                     </div>
@@ -128,9 +129,14 @@ export function WordBubble({
               {word.definition.englishDefinitions && word.definition.englishDefinitions.length > 0 && (
                 <div className="mt-3 pt-3 border-t">
                   <div className="text-xs text-gray-600 mb-1">English Definition:</div>
-                  {word.definition.englishDefinitions.map((engDef: any, index: number) => (
-                    <div key={index} className="text-xs text-gray-700">
-                      <span className="font-medium">{engDef.partOfSpeech}</span> {engDef.meaning}
+                  {word.definition.englishDefinitions?.map((engDef, index: number) => (
+                    <div key={index} className="text-xs text-gray-700 mb-1">
+                      <span className="font-medium">{engDef.partOfSpeech}</span>
+                      {engDef.definitions?.map((defItem, defIndex: number) => (
+                        <div key={defIndex} className="ml-2">
+                          {defIndex + 1}. {defItem.meaning}
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>

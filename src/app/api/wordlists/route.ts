@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { UploadWordlistResponse, WordlistWithCount } from '@/types/wordlist';
+import { PrismaClient } from '@prisma/client';
 
 // 获取用户的所有词书
 export async function GET(request: NextRequest) {
@@ -37,7 +38,13 @@ export async function GET(request: NextRequest) {
     });
 
     // 格式化返回数据
-    const formattedWordlists: WordlistWithCount[] = wordlists.map((wordlist: any) => ({
+    const formattedWordlists: WordlistWithCount[] = wordlists.map((wordlist: {
+      id: number;
+      name: string;
+      createdAt: Date;
+      userId: number;
+      _count: { wordlistEntries: number };
+    }) => ({
       id: wordlist.id,
       name: wordlist.name,
       wordCount: wordlist._count.wordlistEntries,
@@ -125,7 +132,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 开始事务
-    const result = await db.$transaction(async (tx: any) => {
+    const result = await db.$transaction(async (tx) => {
       // 查找或创建单词记录
       const wordIds: number[] = [];
       

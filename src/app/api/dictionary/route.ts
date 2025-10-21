@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dictionaryScraper, validateWordDataCompleteness } from '@/lib/dictionary';
 import { db } from '@/lib/db';
+import { WordDefinitionData } from '@/types/learning';
+import type { WordDataToSave } from '@/lib/dictionary';
 
 /**
  * 将复杂对象转换为 Prisma 可接受的 JsonValue 类型
  * 通过 JSON 序列化和反序列化来确保对象结构符合 Prisma 的 Json 字段要求
  */
-function convertToPrismaJson(data: any): any {
+function convertToPrismaJson(data: unknown) {
   if (data === null || data === undefined) {
-    return data;
+    return null;
   }
-  
+
   try {
     // 将对象转换为 JSON 字符串，然后再解析回来
     // 这样可以确保对象结构符合 Prisma 的 Json 字段要求
@@ -89,7 +91,7 @@ export async function GET(request: NextRequest) {
           // 如果新表结构中没有数据，尝试从JSON字段获取
           if (existingWord.definitionData) {
             // 验证JSON缓存数据的完整性
-            const validation = validateWordDataCompleteness(existingWord.definitionData);
+            const validation = validateWordDataCompleteness(existingWord.definitionData as WordDataToSave);
             console.log(`单词 ${word} JSON缓存数据验证结果:`, validation);
             
             if (validation.isComplete) {
@@ -150,7 +152,7 @@ export async function GET(request: NextRequest) {
         
         // 如果新爬取的数据仍然不完整，添加警告信息
         if (!validation.isComplete) {
-          (result.data as any)._incompleteDataWarning = {
+          (result.data as WordDefinitionData & { _incompleteDataWarning?: { missingFields: string[]; issues: string[] } })._incompleteDataWarning = {
             missingFields: validation.missingFields,
             issues: validation.issues
           };
@@ -179,7 +181,7 @@ export async function GET(request: NextRequest) {
 }
 
 // 从新表结构中获取单词数据
-async function getWordFromTables(wordText: string): Promise<any> {
+async function getWordFromTables(wordText: string): Promise<WordDefinitionData | null> {
   try {
     console.log(`查询单词: ${wordText}`);
     // 先获取单词基本信息
@@ -245,7 +247,7 @@ async function getWordFromTables(wordText: string): Promise<any> {
     };
 
     // 将表结构数据转换为原有JSON格式
-    return convertTablesToJson(wordData);
+    return convertTablesToJson(wordData as Parameters<typeof convertTablesToJson>[0]);
   } catch (error) {
     console.error('从新表结构获取单词数据时出错:', error);
     return null;
@@ -253,7 +255,16 @@ async function getWordFromTables(wordText: string): Promise<any> {
 }
 
 // 将表结构数据转换为JSON格式
-function convertTablesToJson(word: any): any {
+function convertTablesToJson(word: {
+  pronunciation?: string | null;
+  pronunciations?: unknown[];
+  definitions?: unknown[];
+  sentences?: unknown[];
+  wordForms?: unknown[];
+  definitionExamples?: unknown[];
+  definitionIdioms?: unknown[];
+  idiomExamples?: unknown[];
+}): WordDefinitionData | null {
   // 检查是否有任何有效数据
   const hasValidData =
     (word.pronunciations && word.pronunciations.length > 0) ||
@@ -263,14 +274,14 @@ function convertTablesToJson(word: any): any {
     (word.definitionExamples && word.definitionExamples.length > 0) ||
     (word.definitionIdioms && word.definitionIdioms.length > 0) ||
     (word.idiomExamples && word.idiomExamples.length > 0);
-  
+
   if (!hasValidData) {
     console.log('没有找到有效数据，返回 null');
     return null;
   }
 
-  const result: any = {
-    pronunciation: word.pronunciation,
+  const result: WordDefinitionData = {
+    pronunciation: word.pronunciation || undefined,
     definitions: {
       basic: [],
       web: []
@@ -285,16 +296,17 @@ function convertTablesToJson(word: any): any {
 
   // 处理发音数据
   if (word.pronunciations && word.pronunciations.length > 0) {
-    word.pronunciations.forEach((pron: any) => {
-      if (pron.type === 'american') {
-        result.pronunciationData.american = {
-          phonetic: pron.phonetic,
-          audioUrl: pron.audioUrl
+    word.pronunciations.forEach((pron) => {
+      const typedPron = pron as { type: string; phonetic: string; audioUrl: string };
+      if (typedPron.type === 'american') {
+        result.pronunciationData!.american = {
+          phonetic: typedPron.phonetic,
+          audioUrl: typedPron.audioUrl
         };
-      } else if (pron.type === 'british') {
-        result.pronunciationData.british = {
-          phonetic: pron.phonetic,
-          audioUrl: pron.audioUrl
+      } else if (typedPron.type === 'british') {
+        result.pronunciationData!.british = {
+          phonetic: typedPron.phonetic,
+          audioUrl: typedPron.audioUrl
         };
       }
     });
@@ -302,112 +314,181 @@ function convertTablesToJson(word: any): any {
 
   // 处理释义数据
   if (word.definitions && word.definitions.length > 0) {
-    word.definitions.forEach((def: any) => {
-      if (def.type === 'basic') {
-        result.definitions.basic.push({
-          partOfSpeech: def.partOfSpeech,
-          meaning: def.meaning
+    word.definitions.forEach((def) => {
+      const typedDef = def as {
+        type: string;
+        partOfSpeech?: string;
+        meaning?: string;
+        id?: number;
+        order?: number;
+        linkedWords?: string;
+      };
+      if (typedDef.type === 'basic') {
+        result.definitions!.basic!.push({
+          partOfSpeech: typedDef.partOfSpeech || '',
+          meaning: typedDef.meaning || ''
         });
-      } else if (def.type === 'web') {
-        result.definitions.web.push({
-          meaning: def.meaning
+      } else if (typedDef.type === 'web') {
+        result.definitions!.web!.push({
+          meaning: typedDef.meaning || ''
         });
-      } else if (def.type === 'authoritative') {
-        const authDef: any = {
-          partOfSpeech: def.partOfSpeech,
+      } else if (typedDef.type === 'authoritative') {
+        const authDef: {
+          partOfSpeech: string;
+          definitions: Array<{
+            number: number;
+            chineseMeaning: string;
+            englishMeaning: string;
+          }>;
+          idioms?: Array<{
+            number: number;
+            title: string;
+            meaning: string;
+            examples?: Array<{
+              english: string;
+              chinese: string;
+            }>;
+          }>;
+        } = {
+          partOfSpeech: typedDef.partOfSpeech || '',
           definitions: []
         };
 
         // 处理释义条目
-        const examples = word.definitionExamples.filter((ex: any) => ex.definitionId === def.id);
+        const examples = word.definitionExamples?.filter((ex) => {
+          const typedEx = ex as { definitionId: number; order: number; chinese: string; english: string };
+          return typedEx.definitionId === typedDef.id;
+        });
         if (examples && examples.length > 0) {
-          examples.forEach((example: any) => {
+          examples.forEach((example) => {
+            const typedExample = example as { definitionId: number; order: number; chinese: string; english: string };
             authDef.definitions.push({
-              number: example.order,
-              chineseMeaning: example.chinese,
-              englishMeaning: example.english
+              number: typedExample.order,
+              chineseMeaning: typedExample.chinese,
+              englishMeaning: typedExample.english
             });
           });
         }
 
         // 处理习语
-        const idioms = word.definitionIdioms.filter((id: any) => id.definitionId === def.id);
+        const idioms = word.definitionIdioms?.filter((id) => {
+          const typedId = id as { definitionId: number; id: number; title: string; meaning: string };
+          return typedId.definitionId === typedDef.id;
+        });
         if (idioms && idioms.length > 0) {
           authDef.idioms = [];
-          idioms.forEach((idiom: any) => {
-            const idiomItem: any = {
-              number: idiom.order,
-              title: idiom.title,
-              meaning: idiom.meaning
+          idioms.forEach((idiom) => {
+            const typedIdiom = idiom as { definitionId: number; id: number; title: string; meaning: string; order: number };
+            const idiomItem: {
+              number: number;
+              title: string;
+              meaning: string;
+              examples?: Array<{
+                english: string;
+                chinese: string;
+              }>;
+            } = {
+              number: typedIdiom.order,
+              title: typedIdiom.title,
+              meaning: typedIdiom.meaning
             };
 
             // 处理习语例句
-            const idiomExamples = word.idiomExamples.filter((ex: any) => ex.idiomId === idiom.id);
+            const idiomExamples = word.idiomExamples?.filter((ex) => {
+              const typedEx = ex as { idiomId: number; english: string; chinese: string };
+              return typedEx.idiomId === typedIdiom.id;
+            });
             if (idiomExamples && idiomExamples.length > 0) {
-              idiomItem.examples = idiomExamples.map((ex: any) => ({
-                english: ex.english,
-                chinese: ex.chinese
-              }));
+              idiomItem.examples = idiomExamples.map((ex) => {
+                const typedEx = ex as { idiomId: number; english: string; chinese: string };
+                return {
+                  english: typedEx.english,
+                  chinese: typedEx.chinese
+                };
+              });
             }
 
-            authDef.idioms.push(idiomItem);
+            authDef.idioms!.push(idiomItem);
           });
         }
 
-        result.authoritativeDefinitions.push(authDef);
-      } else if (def.type === 'bilingual') {
-        const bilDef: any = {
-          partOfSpeech: def.partOfSpeech,
+        result.authoritativeDefinitions!.push(authDef);
+      } else if (typedDef.type === 'bilingual') {
+        const bilDef: {
+          partOfSpeech: string;
+          definitions: Array<{
+            number: number;
+            meaning: string;
+          }>;
+        } = {
+          partOfSpeech: typedDef.partOfSpeech || '',
           definitions: []
         };
 
-        const examples = word.definitionExamples.filter((ex: any) => ex.definitionId === def.id);
+        const examples = word.definitionExamples?.filter((ex) => {
+          const typedEx = ex as { definitionId: number; order: number; chinese: string; english: string };
+          return typedEx.definitionId === typedDef.id;
+        });
         if (examples && examples.length > 0) {
-          examples.forEach((example: any) => {
+          examples.forEach((example) => {
+            const typedExample = example as { definitionId: number; order: number; chinese: string; english: string };
             bilDef.definitions.push({
-              number: example.order,
-              meaning: example.chinese
+              number: typedExample.order,
+              meaning: typedExample.chinese
             });
           });
         }
 
-        result.bilingualDefinitions.push(bilDef);
-      } else if (def.type === 'english') {
-        const engDef: any = {
-          partOfSpeech: def.partOfSpeech,
+        result.bilingualDefinitions!.push(bilDef);
+      } else if (typedDef.type === 'english') {
+        const engDef: {
+          partOfSpeech: string;
+          definitions: Array<{
+            number: number;
+            meaning: string;
+            linkedWords?: string[];
+          }>;
+        } = {
+          partOfSpeech: typedDef.partOfSpeech || '',
           definitions: []
         };
 
-        if (def.meaning) {
+        if (typedDef.meaning) {
           engDef.definitions.push({
-            number: def.order,
-            meaning: def.meaning,
-            linkedWords: def.linkedWords ? JSON.parse(def.linkedWords) : undefined
+            number: typedDef.order || 0,
+            meaning: typedDef.meaning,
+            linkedWords: typedDef.linkedWords ? JSON.parse(typedDef.linkedWords) : undefined
           });
         }
 
-        result.englishDefinitions.push(engDef);
+        result.englishDefinitions!.push(engDef);
       }
     });
   }
 
   // 处理例句数据
   if (word.sentences && word.sentences.length > 0) {
-    result.sentences = word.sentences.map((sentence: any) => ({
-      number: sentence.order,
-      english: sentence.english,
-      chinese: sentence.chinese,
-      audioUrl: sentence.audioUrl,
-      source: sentence.source
-    }));
+    result.sentences = word.sentences.map((sentence) => {
+      const typedSentence = sentence as { order: number; english: string; chinese: string; audioUrl?: string; source?: string };
+      return {
+        number: typedSentence.order,
+        english: typedSentence.english,
+        chinese: typedSentence.chinese,
+        audioUrl: typedSentence.audioUrl,
+        source: typedSentence.source
+      };
+    });
   }
 
   // 处理词形变化
   if (word.wordForms && word.wordForms.length > 0) {
-    result.wordForms = word.wordForms.map((form: any) => ({
-      form: form.formType,
-      word: form.formWord
-    }));
+    result.wordForms = word.wordForms.map((form) => {
+      const typedForm = form as { formType: string; formWord: string };
+      return {
+        form: typedForm.formType,
+        word: typedForm.formWord
+      };
+    });
   }
 
   return result;
