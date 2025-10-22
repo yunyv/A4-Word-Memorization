@@ -22,6 +22,7 @@ interface UseFocusLearningStateReturn {
   isTransitioning: boolean;
   collisionDetected: boolean;
   hasUserInteraction: boolean;
+  isDragging: boolean;
   containerRef: React.RefObject<HTMLDivElement | null>;
   
   // 设置相关
@@ -37,6 +38,7 @@ interface UseFocusLearningStateReturn {
   setWordCards: React.Dispatch<React.SetStateAction<WordCard[]>>;
   setDefinitionPanel: React.Dispatch<React.SetStateAction<DefinitionPanel | null>>;
   setCollisionDetected: React.Dispatch<React.SetStateAction<boolean>>;
+  setIsDragging: React.Dispatch<React.SetStateAction<boolean>>;
   setDefinitionPanelWithLogging: (panel: DefinitionPanel | null) => void;
   getCardDimensions: () => { widthPercent: number; heightPercent: number };
   handleWordCardClick: (
@@ -105,9 +107,11 @@ export function useFocusLearningState(): UseFocusLearningStateReturn {
   const [isTransitioning] = useState(false);
   const [collisionDetected, setCollisionDetected] = useState(false);
   const [hasUserInteraction, setHasUserInteraction] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   
   // 引用
   const containerRef = useRef<HTMLDivElement>(null);
+  const hasShownFinishModal = useRef(false);
 
   // 计算卡片尺寸百分比
   const getCardDimensions = useCallback(() => {
@@ -203,8 +207,8 @@ export function useFocusLearningState(): UseFocusLearningStateReturn {
     stopAutoAudio?: () => void
   ) => {
     const card = wordCards.find(c => c.id === cardId);
-    if (!card || isTransitioning) {
-      console.log('❌ 卡片点击被忽略:', { cardId, cardExists: !!card, isTransitioning });
+    if (!card || isTransitioning || isDragging) {
+      console.log('❌ 卡片点击被忽略:', { cardId, cardExists: !!card, isTransitioning, isDragging });
       return;
     }
 
@@ -250,7 +254,7 @@ export function useFocusLearningState(): UseFocusLearningStateReturn {
       console.log('🔊 触发音频播放');
       playAutoAudio(card.pronunciationData, true); // 传入 true 表示这是用户直接交互
     }
-  }, [wordCards, definitionPanel, isTransitioning, setDefinitionPanelWithLogging]);
+  }, [wordCards, definitionPanel, isTransitioning, isDragging, setDefinitionPanelWithLogging]);
 
   // 处理点击外部区域
   const handleOutsideClick = useCallback((
@@ -359,6 +363,12 @@ export function useFocusLearningState(): UseFocusLearningStateReturn {
     router.push('/settings');
   }, [router]);
 
+  // 重置学习状态
+  const resetLearningState = useCallback(() => {
+    hasShownFinishModal.current = false;
+    reset();
+  }, [reset]);
+
   // 计算学习统计信息
   const getLearningStats = useCallback(() => {
     const totalWords = learningState.wordQueue.length;
@@ -424,13 +434,21 @@ export function useFocusLearningState(): UseFocusLearningStateReturn {
 
   // 当学习完成时，自动显示完成提示
   useEffect(() => {
-    if (learningState.status === 'finished' && !isExitModalOpen) {
+    if (learningState.status === 'finished' && !isExitModalOpen && !hasShownFinishModal.current) {
+      // 标记已显示完成提示，防止重复弹出
+      hasShownFinishModal.current = true;
+      
       // 延迟显示完成提示，让用户看到最后一个单词
       const timer = setTimeout(() => {
         setIsExitModalOpen(true);
       }, 1000);
 
       return () => clearTimeout(timer);
+    }
+    
+    // 当学习状态不再是完成状态时，重置标记
+    if (learningState.status !== 'finished') {
+      hasShownFinishModal.current = false;
     }
   }, [learningState.status, isExitModalOpen]);
 
@@ -483,6 +501,7 @@ export function useFocusLearningState(): UseFocusLearningStateReturn {
     isTransitioning,
     collisionDetected,
     hasUserInteraction,
+    isDragging,
     containerRef,
     
     // 设置相关
@@ -498,6 +517,7 @@ export function useFocusLearningState(): UseFocusLearningStateReturn {
     setWordCards,
     setDefinitionPanel,
     setCollisionDetected,
+    setIsDragging,
     setDefinitionPanelWithLogging,
     getCardDimensions,
     handleWordCardClick,
@@ -516,7 +536,7 @@ export function useFocusLearningState(): UseFocusLearningStateReturn {
     toggleDefinitionType,
     reorderTypes,
     updateUI,
-    reset,
+    reset: resetLearningState,
     nextWord
   };
 }

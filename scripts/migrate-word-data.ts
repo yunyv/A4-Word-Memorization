@@ -161,8 +161,8 @@ async function migrateWordData(): Promise<MigrationStats> {
   }
 }
 
-async function migrateSingleWord(word: WordRecord) {
-  const definitionData = word.definitionData;
+async function migrateSingleWord(word: { id: number; createdAt: Date; updatedAt: Date; wordText: string; pronunciation: string | null; definitionData: Prisma.JsonValue }) {
+  const definitionData = word.definitionData as WordDefinitionData | null;
   
   if (!definitionData) {
     return; // 跳过没有数据的单词

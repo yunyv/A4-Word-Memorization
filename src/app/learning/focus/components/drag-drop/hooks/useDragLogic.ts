@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { WordCard, DefinitionPanel } from '../../types';
 import { CollisionEngine } from '../../physics';
 
@@ -13,6 +13,7 @@ interface UseDragLogicProps {
   handleCollisions: (cards: WordCard[]) => WordCard[];
   calculateDragVelocity: (cardId: string, newPosition: { x: number; y: number }) => { x: number; y: number };
   setCollisionDetected: (detected: boolean) => void;
+  setIsDragging: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export function useDragLogic({
@@ -25,11 +26,17 @@ export function useDragLogic({
   checkCollisionWithOtherCards,
   handleCollisions,
   calculateDragVelocity,
-  setCollisionDetected
+  setCollisionDetected,
+  setIsDragging
 }: UseDragLogicProps) {
   const [draggedCard, setDraggedCard] = useState<string | null>(null);
   const [draggedPanel, setDraggedPanel] = useState<boolean>(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [hasActuallyDragged, setHasActuallyDragged] = useState(false);
+  const dragStartTime = useRef<number>(0);
+  const dragStartPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const dragThreshold = 5; // 拖动阈值（像素）
+  const dragTimeThreshold = 150; // 拖动时间阈值（毫秒）
 
   // 处理鼠标按下事件（开始拖动）
   const handleMouseDown = useCallback((e: React.MouseEvent, cardId: string) => {
@@ -50,6 +57,11 @@ export function useDragLogic({
       return;
     }
     
+    // 记录拖动开始时间和位置
+    dragStartTime.current = Date.now();
+    dragStartPos.current = { x: e.clientX, y: e.clientY };
+    setHasActuallyDragged(false);
+    
     // 计算鼠标相对于卡片中心的偏移量（百分比）
     const cardCenterX = ((rect.left + rect.width / 2) - containerRect.left) / containerRect.width * 100;
     const cardCenterY = ((rect.top + rect.height / 2) - containerRect.top) / containerRect.height * 100;
@@ -61,7 +73,7 @@ export function useDragLogic({
       y: mouseY - cardCenterY
     };
     
-    console.log('🖱️ 开始拖拽卡片:', {
+    console.log('🖱️ 鼠标按下，准备拖拽卡片:', {
       cardId,
       原始位置: card.position,
       鼠标位置: { x: mouseX, y: mouseY },
@@ -73,6 +85,9 @@ export function useDragLogic({
     setDraggedCard(cardId);
     setCollisionDetected(false);
     
+    // 暂时不设置 isDragging，等待确认是真正的拖动
+    // setIsDragging(true);
+    
     // 设置卡片为拖动状态
     setWordCards(prev =>
       prev.map(card =>
@@ -80,6 +95,28 @@ export function useDragLogic({
       )
     );
   }, [wordCards, containerRef, setWordCards, setCollisionDetected]);
+
+  // 检查是否达到了拖动阈值
+  const checkDragThreshold = useCallback((currentX: number, currentY: number) => {
+    const deltaX = Math.abs(currentX - dragStartPos.current.x);
+    const deltaY = Math.abs(currentY - dragStartPos.current.y);
+    const deltaTime = Date.now() - dragStartTime.current;
+    
+    // 如果移动距离超过阈值或时间超过阈值，认为是真正的拖动
+    if (deltaX > dragThreshold || deltaY > dragThreshold || deltaTime > dragTimeThreshold) {
+      if (!hasActuallyDragged) {
+        console.log('✅ 确认为真正的拖动:', {
+          移动距离: { x: deltaX, y: deltaY },
+          时间差: deltaTime,
+          阈值: { distance: dragThreshold, time: dragTimeThreshold }
+        });
+        setHasActuallyDragged(true);
+        setIsDragging(true);
+      }
+      return true;
+    }
+    return false;
+  }, [hasActuallyDragged, setIsDragging]);
 
   // 处理释义面板鼠标按下事件（开始拖动）
   const handlePanelMouseDown = useCallback((e: React.MouseEvent) => {
@@ -133,6 +170,9 @@ export function useDragLogic({
     const mouseY = ((e.clientY - containerRect.top) / containerRect.height) * 100;
 
     if (draggedCard) {
+      // 检查是否达到了拖动阈值
+      checkDragThreshold(e.clientX, e.clientY);
+      
       // 处理单词卡片拖动
       // 计算新位置（考虑偏移量）
       const newPosition = {
@@ -187,7 +227,7 @@ export function useDragLogic({
         position: boundedPosition
       });
     }
-  }, [draggedCard, draggedPanel, definitionPanel, dragOffset, containerRef, checkPositionInBounds, checkCollisionWithOtherCards, handleCollisions, setWordCards, setDefinitionPanel, setCollisionDetected]);
+  }, [draggedCard, draggedPanel, definitionPanel, dragOffset, containerRef, checkPositionInBounds, checkCollisionWithOtherCards, handleCollisions, setWordCards, setDefinitionPanel, setCollisionDetected, checkDragThreshold]);
 
   // 处理鼠标释放事件（结束拖动）
   const handleMouseUp = useCallback(() => {
@@ -203,7 +243,8 @@ export function useDragLogic({
           cardId: draggedCard,
           最终位置: draggedCardObj.position,
           惯性速度: velocity,
-          会有惯性: Math.abs(velocity.x) > 0.1 || Math.abs(velocity.y) > 0.1
+          会有惯性: Math.abs(velocity.x) > 0.1 || Math.abs(velocity.y) > 0.1,
+          实际拖动了: hasActuallyDragged
         });
 
         // 应用惯性速度到卡片
@@ -225,6 +266,18 @@ export function useDragLogic({
 
       setDraggedCard(null);
       setCollisionDetected(false);
+      
+      // 如果实际拖动了，延迟重置拖动状态，防止立即触发点击事件
+      if (hasActuallyDragged) {
+        setTimeout(() => {
+          setIsDragging(false);
+          setHasActuallyDragged(false);
+        }, 50); // 减少延迟时间
+      } else {
+        // 如果没有实际拖动，立即重置状态
+        setIsDragging(false);
+        setHasActuallyDragged(false);
+      }
     }
 
     if (draggedPanel && definitionPanel) {
@@ -236,7 +289,7 @@ export function useDragLogic({
 
       setDraggedPanel(false);
     }
-  }, [draggedCard, draggedPanel, definitionPanel, wordCards, calculateDragVelocity, setWordCards, setDefinitionPanel, setCollisionDetected]);
+  }, [draggedCard, draggedPanel, definitionPanel, wordCards, calculateDragVelocity, setWordCards, setDefinitionPanel, setCollisionDetected, setIsDragging, hasActuallyDragged]);
 
   // 添加全局鼠标事件监听
   useEffect(() => {

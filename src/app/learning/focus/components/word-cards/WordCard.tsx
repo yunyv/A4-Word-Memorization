@@ -57,12 +57,8 @@ const WordCard = React.memo<WordCardProps>(({
       onMouseDown={(e) => onMouseDown(e, card.id)}
       onClick={(e) => {
         e.stopPropagation();
-        if (!card.isDragging) {
-          console.log('🃏 单词卡片被点击:', card.id, card.text);
-          onClick(card.id, e);
-        } else {
-          console.log('🚫 卡片正在拖拽，忽略点击事件');
-        }
+        console.log('🃏 单词卡片被点击:', card.id, card.text, 'isDragging:', card.isDragging);
+        onClick(card.id, e);
       }}
     >
       {card.text}

@@ -49,7 +49,8 @@ function FocusLearningContent() {
     checkCollisionWithOtherCards: physicsLogic.checkCollisionWithOtherCards,
     handleCollisions: physicsLogic.handleCollisions,
     calculateDragVelocity: physicsLogic.calculateDragVelocity,
-    setCollisionDetected: state.setCollisionDetected
+    setCollisionDetected: state.setCollisionDetected,
+    setIsDragging: state.setIsDragging
   });
 
   // 根据设置渲染释义内容
@@ -275,26 +276,6 @@ function FocusLearningContent() {
           onClick={handleWordCardClick}
         />
       ))}
-      
-      {/* 碰撞指示器 */}
-      {state.collisionDetected && (
-        <div style={{
-          position: 'fixed',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          backgroundColor: 'rgba(255, 107, 107, 0.9)',
-          color: 'white',
-          padding: '8px 16px',
-          borderRadius: '8px',
-          fontSize: '14px',
-          fontWeight: '500',
-          zIndex: 30,
-          pointerEvents: 'none'
-        }}>
-          禁止放置：单词不能重叠
-        </div>
-      )}
       
       {/* 释义面板 */}
       {state.definitionPanel && (
