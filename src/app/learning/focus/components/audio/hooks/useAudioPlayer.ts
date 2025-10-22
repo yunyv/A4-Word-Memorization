@@ -162,7 +162,7 @@ export function useAudioPlayer({ autoPlayAudio, hasUserInteraction }: UseAudioPl
 
             // 重新添加事件监听器
             audioElement.addEventListener('canplay', handleCanPlay, { once: true, signal: abortController.signal });
-            audioElement.addEventListener('error', (e) => {
+            audioElement.addEventListener('error', () => {
               if (!abortController.signal.aborted) {
                 console.error('❌ 英式发音也加载失败:', britishUrl);
                 autoPlayAudioRef.current = null;

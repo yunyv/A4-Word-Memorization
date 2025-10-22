@@ -8,6 +8,7 @@ import { useDefinitionSettings } from '@/hooks/useDefinitionSettings';
 import { WordCard, DefinitionPanel, WordDefinitionData } from '../types';
 import { CollisionEngine } from '../physics';
 import { LearningState } from '@/types/learning';
+import { DefinitionSettings, DefinitionTypeSetting } from '@/types/definitionSettings';
 
 // 定义返回类型
 interface UseFocusLearningStateReturn {
@@ -24,7 +25,7 @@ interface UseFocusLearningStateReturn {
   containerRef: React.RefObject<HTMLDivElement | null>;
   
   // 设置相关
-  settings: any;
+  settings: DefinitionSettings;
   settingsLoading: boolean;
   
   // 学习状态
@@ -41,7 +42,7 @@ interface UseFocusLearningStateReturn {
   handleWordCardClick: (
     cardId: string,
     event?: React.MouseEvent,
-    playAutoAudio?: (pronunciationData: any, isUserInteraction: boolean) => void,
+    playAutoAudio?: (pronunciationData: WordDefinitionData['pronunciationData'], isUserInteraction: boolean) => void,
     stopAutoAudio?: () => void
   ) => void;
   handleOutsideClick: (event: MouseEvent, stopAutoAudio?: () => void) => void;
@@ -60,10 +61,10 @@ interface UseFocusLearningStateReturn {
     remainingWords: number;
     mode: string;
   };
-  getEnabledDefinitionTypes: () => any[];
+  getEnabledDefinitionTypes: () => DefinitionTypeSetting[];
   toggleDefinitionType: (id: string, enabled: boolean) => void;
   reorderTypes: (fromIndex: number, toIndex: number) => void;
-  updateUI: (settings: any) => void;
+  updateUI: (settings: Partial<DefinitionSettings['uiSettings']>) => void;
   reset: () => void;
   nextWord: () => boolean;
 }
@@ -101,7 +102,7 @@ export function useFocusLearningState(): UseFocusLearningStateReturn {
   const [isExitModalOpen, setIsExitModalOpen] = useState(false);
   const [sessionMode, setSessionMode] = useState<'new' | 'review' | 'test' | null>(null);
   const [wordlistId, setWordlistId] = useState<number | undefined>(undefined);
-  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isTransitioning] = useState(false);
   const [collisionDetected, setCollisionDetected] = useState(false);
   const [hasUserInteraction, setHasUserInteraction] = useState(false);
   
@@ -198,7 +199,7 @@ export function useFocusLearningState(): UseFocusLearningStateReturn {
   const handleWordCardClick = useCallback((
     cardId: string,
     event?: React.MouseEvent,
-    playAutoAudio?: (pronunciationData: any, isUserInteraction: boolean) => void,
+    playAutoAudio?: (pronunciationData: WordDefinitionData['pronunciationData'], isUserInteraction: boolean) => void,
     stopAutoAudio?: () => void
   ) => {
     const card = wordCards.find(c => c.id === cardId);
@@ -249,7 +250,7 @@ export function useFocusLearningState(): UseFocusLearningStateReturn {
       console.log('🔊 触发音频播放');
       playAutoAudio(card.pronunciationData, true); // 传入 true 表示这是用户直接交互
     }
-  }, [wordCards, definitionPanel, isTransitioning]);
+  }, [wordCards, definitionPanel, isTransitioning, setDefinitionPanelWithLogging]);
 
   // 处理点击外部区域
   const handleOutsideClick = useCallback((
@@ -281,7 +282,7 @@ export function useFocusLearningState(): UseFocusLearningStateReturn {
         nextWord();
       }, 300);
     }
-  }, [definitionPanel, nextWord]);
+  }, [definitionPanel, nextWord, setDefinitionPanelWithLogging]);
 
   // 处理退出学习
   const handleExitLearning = useCallback(() => {
@@ -419,7 +420,7 @@ export function useFocusLearningState(): UseFocusLearningStateReturn {
         );
       }
     }
-  }, [learningState.currentWordText, isTransitioning, wordCards, addNewWordCard]);
+  }, [learningState.currentWordText, learningState.currentWordData, isTransitioning, wordCards, addNewWordCard]);
 
   // 当学习完成时，自动显示完成提示
   useEffect(() => {

@@ -86,7 +86,7 @@ export async function POST(
     }
 
     // 更新学习进度
-    const updatedProgress = await db.userWordProgress.update({
+    await db.userWordProgress.update({
       where: {
         userId_wordId: {
           userId: user.id,

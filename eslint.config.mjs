@@ -22,9 +22,7 @@ const eslintConfig = [
   },
   {
     rules: {
-      '@typescript-eslint/no-explicit-any': 'off',
-      'react-hooks/exhaustive-deps': 'off',
-      '@typescript-eslint/no-unused-vars': 'off'
+      // 保持严格的代码质量标准
     }
   }
 ];

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { UploadWordlistResponse, WordlistWithCount } from '@/types/wordlist';
-import { PrismaClient } from '@prisma/client';
 
 // 获取用户的所有词书
 export async function GET(request: NextRequest) {

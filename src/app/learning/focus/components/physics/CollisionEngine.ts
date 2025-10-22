@@ -74,8 +74,8 @@ export class CollisionEngine {
     collision: CollisionInfo,
     card1: WordCard,
     card2: WordCard,
-    cardWidth: number,
-    cardHeight: number
+    _cardWidth: number,
+    _cardHeight: number
   ): VelocityPair {
     const physics1 = card1.physics || this.createDefaultPhysics();
     const physics2 = card2.physics || this.createDefaultPhysics();

@@ -1,7 +1,108 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { MigrationStats } from '../src/types/word';
+import { WordDefinitionData } from '../src/types/learning';
 
 const prisma = new PrismaClient();
+
+// 定义数据库记录类型
+interface WordRecord {
+  id: number;
+  wordText: string;
+  definitionData: WordDefinitionData | null;
+  pronunciation?: string | null;
+}
+
+// 定义事务客户端类型
+interface TransactionClient {
+  $executeRaw: PrismaClient['$executeRaw'];
+  $queryRaw: PrismaClient['$queryRaw'];
+}
+
+// 定义发音数据类型
+interface PronunciationData {
+  american?: {
+    phonetic: string;
+    audioUrl: string;
+  };
+  british?: {
+    phonetic: string;
+    audioUrl: string;
+  };
+}
+
+// 定义基本释义类型
+interface BasicDefinition {
+  partOfSpeech: string;
+  meaning: string;
+}
+
+// 定义网络释义类型
+interface WebDefinition {
+  meaning: string;
+}
+
+// 定义释义数据类型
+interface DefinitionsData {
+  basic?: BasicDefinition[];
+  web?: WebDefinition[];
+}
+
+// 定义权威释义类型
+interface AuthoritativeDefinition {
+  partOfSpeech: string;
+  definitions: {
+    number: number;
+    chineseMeaning: string;
+    englishMeaning?: string;
+    examples?: {
+      english: string;
+      chinese: string;
+    }[];
+  }[];
+  idioms?: {
+    number: number;
+    title: string;
+    meaning: string;
+    examples?: {
+      english: string;
+      chinese: string;
+    }[];
+  }[];
+}
+
+// 定义英汉释义类型
+interface BilingualDefinition {
+  partOfSpeech: string;
+  definitions: {
+    number: number;
+    meaning: string;
+  }[];
+}
+
+// 定义英英释义类型
+interface EnglishDefinition {
+  partOfSpeech: string;
+  definitions: {
+    number: number;
+    meaning: string;
+    linkedWords?: string[];
+  }[];
+}
+
+// 定义例句类型
+interface SentenceData {
+  number: number;
+  english: string;
+  chinese: string;
+  audioUrl?: string;
+  source?: string;
+}
+
+// 定义词形类型
+interface WordFormData {
+  form: string;
+  word: string;
+}
 
 async function migrateWordData(): Promise<MigrationStats> {
   const stats: MigrationStats = {
@@ -60,8 +161,8 @@ async function migrateWordData(): Promise<MigrationStats> {
   }
 }
 
-async function migrateSingleWord(word: any) {
-  const definitionData = word.definitionData as any;
+async function migrateSingleWord(word: WordRecord) {
+  const definitionData = word.definitionData;
   
   if (!definitionData) {
     return; // 跳过没有数据的单词
@@ -112,7 +213,7 @@ async function migrateSingleWord(word: any) {
   });
 }
 
-async function migratePronunciationData(tx: any, wordId: number, pronunciationData: any) {
+async function migratePronunciationData(tx: TransactionClient, wordId: number, pronunciationData: PronunciationData) {
   // 美式发音
   if (pronunciationData.american) {
     await tx.$executeRaw`
@@ -138,7 +239,7 @@ async function migratePronunciationData(tx: any, wordId: number, pronunciationDa
   }
 }
 
-async function migrateDefinitionData(tx: any, wordId: number, definitions: any) {
+async function migrateDefinitionData(tx: TransactionClient, wordId: number, definitions: DefinitionsData) {
   // 基本释义
   if (definitions.basic && definitions.basic.length > 0) {
     for (let i = 0; i < definitions.basic.length; i++) {
@@ -162,14 +263,14 @@ async function migrateDefinitionData(tx: any, wordId: number, definitions: any) 
   }
 }
 
-async function migrateAuthoritativeDefinitions(tx: any, wordId: number, authoritativeDefinitions: any[]) {
+async function migrateAuthoritativeDefinitions(tx: TransactionClient, wordId: number, authoritativeDefinitions: AuthoritativeDefinition[]) {
   for (const authDef of authoritativeDefinitions) {
     // 创建主释义记录
     const definitionResult = await tx.$queryRaw`
       INSERT INTO WordDefinitions (word_id, type, part_of_speech, order, created_at, updated_at)
       VALUES (${wordId}, 'authoritative', ${authDef.partOfSpeech}, 0, NOW(), NOW())
     `;
-    const definitionId = (definitionResult as any).insertId;
+    const definitionId = (definitionResult as { insertId: number }).insertId;
 
     // 创建释义条目
     for (const defItem of authDef.definitions) {
@@ -196,7 +297,7 @@ async function migrateAuthoritativeDefinitions(tx: any, wordId: number, authorit
           INSERT INTO DefinitionIdioms (definition_id, order, title, meaning, created_at, updated_at)
           VALUES (${definitionId}, ${idiom.number}, ${idiom.title}, ${idiom.meaning}, NOW(), NOW())
         `;
-        const idiomId = (idiomResult as any).insertId;
+        const idiomId = (idiomResult as { insertId: number }).insertId;
 
         // 创建习语例句
         if (idiom.examples && idiom.examples.length > 0) {
@@ -212,13 +313,13 @@ async function migrateAuthoritativeDefinitions(tx: any, wordId: number, authorit
   }
 }
 
-async function migrateBilingualDefinitions(tx: any, wordId: number, bilingualDefinitions: any[]) {
+async function migrateBilingualDefinitions(tx: TransactionClient, wordId: number, bilingualDefinitions: BilingualDefinition[]) {
   for (const bilDef of bilingualDefinitions) {
     const definitionResult = await tx.$queryRaw`
       INSERT INTO WordDefinitions (word_id, type, part_of_speech, order, created_at, updated_at)
       VALUES (${wordId}, 'bilingual', ${bilDef.partOfSpeech}, 0, NOW(), NOW())
     `;
-    const definitionId = (definitionResult as any).insertId;
+    const definitionId = (definitionResult as { insertId: number }).insertId;
 
     // 创建释义条目
     for (const defItem of bilDef.definitions) {
@@ -230,7 +331,7 @@ async function migrateBilingualDefinitions(tx: any, wordId: number, bilingualDef
   }
 }
 
-async function migrateEnglishDefinitions(tx: any, wordId: number, englishDefinitions: any[]) {
+async function migrateEnglishDefinitions(tx: TransactionClient, wordId: number, englishDefinitions: EnglishDefinition[]) {
   for (const engDef of englishDefinitions) {
     // 创建释义条目
     for (const defItem of engDef.definitions) {
@@ -242,7 +343,7 @@ async function migrateEnglishDefinitions(tx: any, wordId: number, englishDefinit
   }
 }
 
-async function migrateSentenceData(tx: any, wordId: number, sentences: any[]) {
+async function migrateSentenceData(tx: TransactionClient, wordId: number, sentences: SentenceData[]) {
   for (const sentence of sentences) {
     await tx.$executeRaw`
       INSERT INTO WordSentences (word_id, order, english, chinese, audio_url, source, created_at, updated_at)
@@ -251,7 +352,7 @@ async function migrateSentenceData(tx: any, wordId: number, sentences: any[]) {
   }
 }
 
-async function migrateWordForms(tx: any, wordId: number, wordForms: any[]) {
+async function migrateWordForms(tx: TransactionClient, wordId: number, wordForms: WordFormData[]) {
   for (const wordForm of wordForms) {
     await tx.$executeRaw`
       INSERT INTO WordForms (word_id, form_type, form_word, created_at, updated_at)

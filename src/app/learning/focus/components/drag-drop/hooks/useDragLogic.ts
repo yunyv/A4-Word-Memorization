@@ -210,7 +210,7 @@ export function useDragLogic({
         setWordCards(prev =>
           prev.map(card => {
             if (card.id === draggedCard) {
-              const physics = card.physics || { velocity: { x: 0, y: 0 }, acceleration: { x: 0, y: 0 }, mass: 1, elasticity: 0.8, friction: 0.98 };
+              const physics = card.physics || CollisionEngine.createDefaultPhysics();
               return {
                 ...card,
                 isDragging: false,
