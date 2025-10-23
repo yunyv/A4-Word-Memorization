@@ -3,6 +3,64 @@ import { requireAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { UploadWordlistResponse, WordlistWithCount } from '@/types/wordlist';
 
+// 初始化用户学习进度的辅助函数
+async function initializeUserProgress(wordlistId: number, userId: number) {
+  // 获取词书中的所有单词
+  const wordlistEntries = await db.wordlistEntry.findMany({
+    where: { wordlistId },
+    include: {
+      word: {
+        select: { id: true }
+      }
+    }
+  });
+
+  if (wordlistEntries.length === 0) {
+    return; // 跳过空词书
+  }
+
+  // 获取用户在该词书中已有学习进度的单词
+  const existingProgress = await db.userWordProgress.findMany({
+    where: {
+      userId,
+      wordId: {
+        in: wordlistEntries.map(entry => entry.word.id)
+      }
+    },
+    select: { wordId: true }
+  });
+
+  const existingWordIds = new Set(existingProgress.map(progress => progress.wordId));
+
+  // 筛选出需要初始化的单词
+  const wordsToInitialize = wordlistEntries.filter(
+    entry => !existingWordIds.has(entry.word.id)
+  );
+
+  if (wordsToInitialize.length === 0) {
+    return; // 所有单词都已初始化
+  }
+
+  // 批量创建学习进度记录
+  const progressData = wordsToInitialize.map(entry => ({
+    userId,
+    wordId: entry.word.id,
+    reviewStage: 0, // 初始复习阶段为0
+    nextReviewDate: new Date(), // 立即可学习
+    lastReviewedAt: null
+  }));
+
+  // 使用事务批量插入
+  await db.$transaction(async (tx) => {
+    await tx.userWordProgress.createMany({
+      data: progressData,
+      skipDuplicates: true
+    });
+  });
+
+  console.log(`初始化了 ${progressData.length} 个单词的学习进度`);
+}
+
 // 获取用户的所有词书
 export async function GET(request: NextRequest) {
   try {
@@ -179,10 +237,28 @@ export async function POST(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({
-      success: true,
-      ...result
-    } as UploadWordlistResponse);
+    // 词书创建成功后，立即初始化学习进度
+    try {
+      // 等待学习进度初始化完成
+      await initializeUserProgress(result.id, userId);
+
+      console.log(`词书 "${name}" 上传成功，已初始化 ${result.wordCount} 个单词的学习进度`);
+
+      return NextResponse.json({
+        success: true,
+        ...result,
+        initialized: true
+      } as UploadWordlistResponse);
+    } catch (initError) {
+      console.error('初始化学习进度失败:', initError);
+      // 即使初始化失败，也返回词书创建成功的结果
+      return NextResponse.json({
+        success: true,
+        ...result,
+        initialized: false,
+        initError: 'Failed to initialize learning progress'
+      } as UploadWordlistResponse);
+    }
 
   } catch (error) {
     console.error('Error uploading wordlist:', error);

@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     // 获取查询参数
     const searchParams = request.nextUrl.searchParams;
     const wordlistId = searchParams.get('wordlistId');
-    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 50;
+    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 200;
 
     // 构建查询条件
     const whereCondition: {
@@ -123,17 +123,17 @@ export async function GET(request: NextRequest) {
     if (wordlistId) {
       // 验证用户是否有权限访问该词书
       const wordlist = await db.wordlist.findUnique({
-        where: { 
+        where: {
           id: parseInt(wordlistId),
-          userId: user.id 
+          userId: user.id
         }
       });
 
       if (!wordlist) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: 'Wordlist not found or you do not have permission to access it' 
+          {
+            success: false,
+            error: 'Wordlist not found or you do not have permission to access it'
           },
           { status: 404 }
         );
@@ -146,6 +146,36 @@ export async function GET(request: NextRequest) {
       });
 
       const wordIds = wordlistEntries.map((entry: WordlistEntry) => entry.wordId);
+
+      // 检查学习进度是否已初始化
+      const existingProgress = await db.userWordProgress.findMany({
+        where: {
+          userId: user.id,
+          wordId: { in: wordIds }
+        },
+        select: { wordId: true }
+      });
+
+      const existingWordIds = new Set(existingProgress.map(p => p.wordId));
+      const uninitializedWordIds = wordIds.filter(id => !existingWordIds.has(id));
+
+      // 如果有未初始化的单词，自动初始化
+      if (uninitializedWordIds.length > 0) {
+        console.log(`自动初始化 ${uninitializedWordIds.length} 个单词的学习进度`);
+        const progressData = uninitializedWordIds.map(wordId => ({
+          userId: user.id,
+          wordId: wordId,
+          reviewStage: 0,
+          nextReviewDate: new Date(),
+          lastReviewedAt: null
+        }));
+
+        await db.userWordProgress.createMany({
+          data: progressData,
+          skipDuplicates: true
+        });
+      }
+
       whereCondition.wordId = { in: wordIds };
     }
 

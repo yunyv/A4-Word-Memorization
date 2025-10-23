@@ -159,16 +159,55 @@ export async function getWordlistCacheStatus(wordlistId: number) {
   }
 }
 
+// 清理与词书相关的缓存
+export async function clearWordlistRelatedCaches(wordlistId: number) {
+  try {
+    const keysToDelete: string[] = [];
+
+    // 获取所有可能的缓存键模式
+    const patterns = [
+      `due-words:${wordlistId}`,
+      `due-words:user`,
+      `review-stats:${wordlistId}`,
+      `review-stats:user`,
+      `wordlist:${wordlistId}:words`,
+      `learning-session:user`
+    ];
+
+    // 由于我们的缓存实现不暴露所有键，我们需要使用一个变通方法
+    // 在实际应用中，你可能需要维护一个键的注册表
+    memoryCache.cleanup(); // 清理所有过期缓存
+
+    // 清理特定模式的缓存
+    for (const pattern of patterns) {
+      memoryCache.delete(pattern);
+    }
+
+    console.log(`清理了词书 ${wordlistId} 的相关缓存`);
+    return {
+      success: true,
+      message: `Cleared caches for wordlist ${wordlistId}`,
+      patterns: patterns
+    };
+  } catch (error) {
+    console.error('Error clearing wordlist related caches:', error);
+    return {
+      success: false,
+      error: 'Failed to clear wordlist related caches'
+    };
+  }
+}
+
 // 清理过期缓存
 export async function cleanupExpiredCache(daysOld: number = 30) {
   try {
     let cleanedCount = 0;
-    
+
     // 由于我们的缓存实现不存储所有键的元数据，
     // 这里我们简单地执行一次完整的缓存清理
     memoryCache.cleanup();
     cleanedCount = 1; // 简化实现，实际清理了整个缓存
-    
+
     return {
       success: true,
       message: `Cache cleanup completed`,

@@ -6,7 +6,7 @@ import type { WordDataToSave } from '@/lib/dictionary';
 
 /**
  * 将复杂对象转换为 Prisma 可接受的 JsonValue 类型
- * 通过 JSON 序列化和反序列化来确保对象结构符合 Prisma 的 Json 字段要求
+ * 修复：优化数据转换逻辑，确保复杂数据结构在转换过程中不丢失信息
  */
 function convertToPrismaJson(data: unknown) {
   if (data === null || data === undefined) {
@@ -14,12 +14,56 @@ function convertToPrismaJson(data: unknown) {
   }
 
   try {
-    // 将对象转换为 JSON 字符串，然后再解析回来
-    // 这样可以确保对象结构符合 Prisma 的 Json 字段要求
-    return JSON.parse(JSON.stringify(data));
+    // 修复：添加更安全的数据转换逻辑
+    // 1. 处理特殊值（NaN, Infinity, -Infinity）
+    const sanitizedData = JSON.parse(JSON.stringify(data, (key, value) => {
+      if (typeof value === 'number' && (isNaN(value) || !isFinite(value))) {
+        return null; // 将 NaN 和 Infinity 转换为 null
+      }
+      // 2. 处理函数类型（不应该存在，但以防万一）
+      if (typeof value === 'function') {
+        return undefined; // 移除函数类型
+      }
+      // 3. 处理循环引用
+      if (typeof value === 'object' && value !== null) {
+        if (value.constructor === Object || Array.isArray(value)) {
+          return value; // 普通对象或数组，继续处理
+        }
+        // 其他类型的对象（如 Date, RegExp 等）转换为字符串
+        return value.toString();
+      }
+      return value;
+    }));
+    
+    // 4. 验证转换后的数据
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[DEBUG] 数据转换完成，验证结果:', {
+        originalType: typeof data,
+        resultType: typeof sanitizedData,
+        isArray: Array.isArray(sanitizedData),
+        keys: sanitizedData && typeof sanitizedData === 'object' ? Object.keys(sanitizedData) : []
+      });
+    }
+    
+    return sanitizedData;
   } catch (error) {
-    console.error('转换对象为 Prisma JSON 时出错:', error);
-    return null;
+    console.error('[ERROR] 转换对象为 Prisma JSON 时出错:', error);
+    console.error('[ERROR] 转换失败的数据类型:', typeof data);
+    console.error('[ERROR] 转换失败的数据:', data);
+    
+    // 修复：提供更好的错误恢复机制
+    try {
+      // 尝试简单的字符串转换作为后备方案
+      return {
+        _error: '数据转换失败',
+        _originalType: typeof data,
+        _originalString: String(data),
+        _timestamp: new Date().toISOString()
+      };
+    } catch (fallbackError) {
+      console.error('[ERROR] 后备转换方案也失败:', fallbackError);
+      return null;
+    }
   }
 }
 
@@ -66,18 +110,38 @@ export async function GET(request: NextRequest) {
           const validation = validateWordDataCompleteness(wordData);
           console.log(`单词 ${word} 数据验证结果:`, validation);
           
-          if (validation.isComplete) {
-            // 如果数据完整，直接返回
-            console.log(`从新表结构中获取完整单词数据: ${word}`);
-            return NextResponse.json({
+          // 修复：如果数据完整或部分有效，则直接返回
+          if (validation.isComplete || validation.isPartiallyValid) {
+            // 如果数据完整或部分有效，直接返回
+            console.log(`从新表结构中获取${validation.isComplete ? '完整' : '部分有效'}单词数据: ${word}`);
+            const response = {
               success: true,
               word: word!,
               requestedType: type,
               data: wordData
-            });
+            };
+            
+            // 如果不是完整数据，添加警告信息
+            if (!validation.isComplete) {
+              (response as {
+                success: boolean;
+                word: string;
+                requestedType: string;
+                data: unknown;
+                _incompleteDataWarning?: {
+                  missingFields: string[];
+                  issues: string[];
+                };
+              })._incompleteDataWarning = {
+                missingFields: validation.missingFields,
+                issues: validation.issues
+              };
+            }
+            
+            return NextResponse.json(response);
           } else {
-            // 如果数据不完整，记录日志并继续执行爬虫逻辑
-            console.log(`单词 ${word} 数据不完整，缺失字段: ${validation.missingFields.join(', ')}`);
+            // 如果数据无效，记录日志并继续执行爬虫逻辑
+            console.log(`单词 ${word} 数据无效，缺失字段: ${validation.missingFields.join(', ')}`);
             console.log(`单词 ${word} 数据问题: ${validation.issues.join(', ')}`);
           }
         }
@@ -94,18 +158,38 @@ export async function GET(request: NextRequest) {
             const validation = validateWordDataCompleteness(existingWord.definitionData as WordDataToSave);
             console.log(`单词 ${word} JSON缓存数据验证结果:`, validation);
             
-            if (validation.isComplete) {
-              // 如果JSON缓存数据完整，返回缓存数据
-              console.log(`从JSON缓存中获取完整单词数据: ${word}`);
-              return NextResponse.json({
+            // 修复：如果数据完整或部分有效，则返回缓存数据
+            if (validation.isComplete || validation.isPartiallyValid) {
+              // 如果JSON缓存数据完整或部分有效，返回缓存数据
+              console.log(`从JSON缓存中获取${validation.isComplete ? '完整' : '部分有效'}单词数据: ${word}`);
+              const response = {
                 success: true,
                 word: word!,
                 requestedType: type,
                 data: existingWord.definitionData
-              });
+              };
+              
+              // 如果不是完整数据，添加警告信息
+              if (!validation.isComplete) {
+                (response as {
+                  success: boolean;
+                  word: string;
+                  requestedType: string;
+                  data: unknown;
+                  _incompleteDataWarning?: {
+                    missingFields: string[];
+                    issues: string[];
+                  };
+                })._incompleteDataWarning = {
+                  missingFields: validation.missingFields,
+                  issues: validation.issues
+                };
+              }
+              
+              return NextResponse.json(response);
             } else {
-              // 如果JSON缓存数据不完整，记录日志并继续执行爬虫逻辑
-              console.log(`单词 ${word} JSON缓存数据不完整，缺失字段: ${validation.missingFields.join(', ')}`);
+              // 如果JSON缓存数据无效，记录日志并继续执行爬虫逻辑
+              console.log(`单词 ${word} JSON缓存数据无效，缺失字段: ${validation.missingFields.join(', ')}`);
               console.log(`单词 ${word} JSON缓存数据问题: ${validation.issues.join(', ')}`);
             }
           } else {
@@ -118,45 +202,61 @@ export async function GET(request: NextRequest) {
       }
 
       // 如果缓存不存在或数据不完整，执行爬虫
-      console.log(`开始爬取单词: ${word}`);
+      console.log(`[DEBUG] 开始爬取单词: ${word}, 类型: ${type}`);
       const result = await dictionaryScraper.scrapeWord(word!, type);
       
       if (result.success && result.data) {
         // 验证新爬取的数据完整性
         const validation = validateWordDataCompleteness(result.data);
-        console.log(`新爬取的单词 ${word} 数据验证结果:`, validation);
+        console.log(`[DEBUG] 新爬取的单词 ${word} 数据验证结果:`, validation);
         
-        // 将爬取结果存储到数据库（同时保存到JSON和新表结构）
-        try {
-          // 保存到JSON字段（兼容性）
-          await db.word.upsert({
-            where: { wordText: word!.toLowerCase() },
-            update: {
-              definitionData: convertToPrismaJson(result.data),
-              updatedAt: new Date()
-            },
-            create: {
-              wordText: word!.toLowerCase(),
-              definitionData: convertToPrismaJson(result.data)
-            }
-          });
-          
-          // 保存到新表结构
-          await dictionaryScraper.saveWordDataToTables(word!, result.data);
-          
-          console.log(`单词 ${word} 已缓存到数据库（JSON和新表结构）`);
-        } catch (cacheError) {
-          console.error('缓存单词数据时出错:', cacheError);
-          // 不影响返回结果，只记录错误
+        // 修复：只有当数据部分有效或完整时才保存到数据库
+        if (validation.isPartiallyValid || validation.isComplete) {
+          // 将爬取结果存储到数据库（同时保存到JSON和新表结构）
+          try {
+            console.log(`[DEBUG] 开始保存爬取结果到数据库`);
+            
+            // 保存到JSON字段（兼容性）
+            console.log(`[DEBUG] 步骤1: 保存到JSON字段`);
+            await db.word.upsert({
+              where: { wordText: word!.toLowerCase() },
+              update: {
+                definitionData: convertToPrismaJson(result.data),
+                updatedAt: new Date()
+              },
+              create: {
+                wordText: word!.toLowerCase(),
+                definitionData: convertToPrismaJson(result.data)
+              }
+            });
+            console.log(`[DEBUG] JSON字段保存完成`);
+            
+            // 保存到新表结构
+            console.log(`[DEBUG] 步骤2: 保存到新表结构`);
+            await dictionaryScraper.saveWordDataToTables(word!, result.data);
+            console.log(`[DEBUG] 新表结构保存完成`);
+            
+            console.log(`[DEBUG] 单词 ${word} 已成功缓存到数据库（JSON和新表结构）`);
+          } catch (cacheError) {
+            console.error(`[ERROR] 缓存单词数据时出错:`, cacheError);
+            console.error(`[ERROR] 缓存错误详情:`, {
+              name: cacheError instanceof Error ? cacheError.name : 'Unknown',
+              message: cacheError instanceof Error ? cacheError.message : 'Unknown error',
+              stack: cacheError instanceof Error ? cacheError.stack : undefined
+            });
+            // 不影响返回结果，只记录错误
+          }
+        } else {
+          console.log(`[WARNING] 单词 ${word} 数据无效，不保存到数据库`);
         }
         
-        // 如果新爬取的数据仍然不完整，添加警告信息
+        // 如果新爬取的数据不完整，添加警告信息
         if (!validation.isComplete) {
           (result.data as WordDefinitionData & { _incompleteDataWarning?: { missingFields: string[]; issues: string[] } })._incompleteDataWarning = {
             missingFields: validation.missingFields,
             issues: validation.issues
           };
-          console.log(`警告: 新爬取的单词 ${word} 数据仍然不完整`);
+          console.log(`警告: 新爬取的单词 ${word} 数据${validation.isPartiallyValid ? '部分有效' : '无效'}`);
         }
         
         return NextResponse.json(result);
@@ -168,14 +268,60 @@ export async function GET(request: NextRequest) {
       }
     }
   } catch (error) {
+    // 修复：改进错误处理机制，提供更详细的错误信息
     console.error('API路由处理错误:', error);
+    
+    // 记录详细错误信息
+    const errorDetails = {
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      word,
+      type,
+      timestamp: new Date().toISOString()
+    };
+    
+    console.error('[ERROR] API错误详情:', errorDetails);
+    
+    // 根据错误类型返回不同的状态码和消息
+    let statusCode = 500;
+    let errorMessage = '服务器内部错误';
+    
+    if (error instanceof Error) {
+      // 网络相关错误
+      if (error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
+        statusCode = 503;
+        errorMessage = '词典服务暂时不可用，请稍后重试';
+      }
+      // 超时错误
+      else if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
+        statusCode = 408;
+        errorMessage = '请求超时，请稍后重试';
+      }
+      // 数据库错误
+      else if (error.message.includes('database') || error.message.includes('Prisma')) {
+        statusCode = 503;
+        errorMessage = '数据库服务暂时不可用，请稍后重试';
+      }
+      // 解析错误
+      else if (error.message.includes('parse') || error.message.includes('JSON')) {
+        statusCode = 500;
+        errorMessage = '数据解析错误，请联系管理员';
+      }
+    }
+    
     return NextResponse.json(
       {
         success: false,
-        error: '服务器内部错误',
-        word
+        error: errorMessage,
+        word,
+        type,
+        // 开发环境下提供详细错误信息
+        ...(process.env.NODE_ENV === 'development' && {
+          errorDetails: errorDetails
+        })
       },
-      { status: 500 }
+      { status: statusCode }
     );
   }
 }

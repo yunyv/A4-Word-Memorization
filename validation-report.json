@@ -1,0 +1,286 @@
+{
+  "timestamp": "2025-10-23T07:18:26.883Z",
+  "dataIntegrityScore": 70,
+  "tableStatistics": {
+    "words": 90,
+    "wordPronunciations": 116,
+    "wordDefinitions": 494,
+    "definitionExamples": 736,
+    "definitionIdioms": 21,
+    "idiomExamples": 19,
+    "wordSentences": 580,
+    "wordForms": 101
+  },
+  "dataQualityMetrics": {
+    "wordsWithCompleteData": 58,
+    "wordsWithPartialData": 0,
+    "wordsWithOnlyJson": 32,
+    "averageDefinitionsPerWord": 5.488888888888889,
+    "averageSentencesPerWord": 6.444444444444445,
+    "averagePronunciationsPerWord": 1.288888888888889
+  },
+  "issuesBySeverity": {
+    "critical": 32,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  },
+  "detailedIssues": [
+    {
+      "wordId": 109,
+      "wordText": "manipulate",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 110,
+      "wordText": "residential",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 111,
+      "wordText": "virgin",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 112,
+      "wordText": "recreation",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 113,
+      "wordText": "hatch",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 114,
+      "wordText": "versatile",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 115,
+      "wordText": "shatter",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 116,
+      "wordText": "indulge",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 117,
+      "wordText": "manuscript",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 118,
+      "wordText": "tackle",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 119,
+      "wordText": "novelty",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 120,
+      "wordText": "oval",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 121,
+      "wordText": "dispatch",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 122,
+      "wordText": "intricate",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 123,
+      "wordText": "murmur",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 124,
+      "wordText": "imitation",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 125,
+      "wordText": "pension",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 126,
+      "wordText": "odor",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 127,
+      "wordText": "facet",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 128,
+      "wordText": "liner",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 129,
+      "wordText": "bleak",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 130,
+      "wordText": "strive",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 131,
+      "wordText": "indefinite",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 132,
+      "wordText": "relay",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 133,
+      "wordText": "resultant",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 134,
+      "wordText": "trait",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 135,
+      "wordText": "evoke",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 136,
+      "wordText": "misfortune",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 137,
+      "wordText": "patrol",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 138,
+      "wordText": "veil",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 139,
+      "wordText": "orthodox",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    },
+    {
+      "wordId": 140,
+      "wordText": "revolve",
+      "issueType": "missing_data",
+      "severity": "critical",
+      "description": "缺少释义数据",
+      "suggestedFix": "重新爬取单词数据或检查数据源"
+    }
+  ]
+}

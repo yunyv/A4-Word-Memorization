@@ -219,7 +219,7 @@ export function useLearning() {
   }, [preloadNextWords]);
 
   // 获取待复习的单词
-  const fetchDueWords = useCallback(async (wordlistId?: number, limit: number = 50, isNewMode: boolean = false): Promise<DueWordsResponse | null> => {
+  const fetchDueWords = useCallback(async (wordlistId?: number, limit: number = 200, isNewMode: boolean = false): Promise<DueWordsResponse | null> => {
     setIsLoading(true);
     setError(null);
 
@@ -259,7 +259,7 @@ export function useLearning() {
   const startLearningSession = useCallback(async (
     sessionType: 'new' | 'review' | 'test',
     wordlistId?: number,
-    limit: number = 50
+    limit: number = 200
   ): Promise<boolean> => {
     setIsLoading(true);
     setError(null);

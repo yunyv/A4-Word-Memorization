@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { clearWordlistRelatedCaches } from '@/lib/cacheUtils';
 import { ReviewProgressRequest, ReviewProgressResponse, EBBINGHAUS_INTERVAL_MAP } from '@/types/learning';
 
 // 更新单词复习进度
@@ -99,6 +100,29 @@ export async function POST(
         lastReviewedAt: new Date()
       }
     });
+
+    // 清理相关缓存
+    try {
+      // 获取包含该单词的所有词书
+      const wordlists = await db.wordlist.findMany({
+        where: {
+          wordlistEntries: {
+            some: { wordId: wordIdNum }
+          }
+        }
+      });
+
+      // 清理每个相关词书的缓存
+      for (const wordlist of wordlists) {
+        await clearWordlistRelatedCaches(wordlist.id);
+      }
+
+      // 同时清理用户级别的缓存
+      await clearWordlistRelatedCaches(0); // 使用0表示用户级别缓存
+    } catch (cacheError) {
+      console.error('清理缓存失败:', cacheError);
+      // 缓存清理失败不影响主要功能，只记录错误
+    }
 
     return NextResponse.json({
       success: true,
