@@ -46,13 +46,16 @@ model Wordlist {
 model Word {
   id              Int      @id @default(autoincrement())
   wordText        String   @unique @map("word_text") @db.VarChar(100)
-  
+
+  // 数据状态字段
+  status          WordStatus @default(PENDING) // 数据获取状态
+
   // 基本信息字段
   pronunciation   String?  @map("pronunciation") @db.VarChar(200)
-  
+
   // 保留原有JSON字段作为备份
   definitionData  Json?    @map("definition_data")
-  
+
   // 时间戳
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
@@ -66,6 +69,14 @@ model Word {
   userWordProgress UserWordProgress[]
 
   @@map("Words")
+}
+
+// 单词状态枚举
+enum WordStatus {
+  PENDING     // 待获取（默认状态）
+  PROCESSING  // 正在爬取中
+  COMPLETED   // 已完成爬取
+  FAILED      // 爬取失败
 }
 
 // 词书条目表：词书和单词的多对多关联

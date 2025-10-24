@@ -190,51 +190,107 @@ export async function POST(request: NextRequest) {
 
     // 开始事务
     const result = await db.$transaction(async (tx) => {
-      // 查找或创建单词记录
-      const wordIds: number[] = [];
-      
-      for (const wordText of uniqueWords) {
-        // 尝试查找现有单词
-        let word = await tx.word.findUnique({
-          where: { wordText }
+      // 批量查找现有单词
+      const existingWords = await tx.word.findMany({
+        where: {
+          wordText: {
+            in: uniqueWords
+          }
+        },
+        select: {
+          id: true,
+          wordText: true
+        }
+      });
+
+      // 创建现有单词的映射
+      const existingWordMap = new Map(
+        existingWords.map(word => [word.wordText, word.id])
+      );
+
+      // 找出需要创建的新单词
+      const newWords = uniqueWords.filter(wordText => !existingWordMap.has(wordText));
+
+      // 批量创建新单词
+      if (newWords.length > 0) {
+        const createdWords = await tx.word.createMany({
+          data: newWords.map(wordText => ({
+            wordText,
+            definitionData: {}
+          })),
+          skipDuplicates: true
         });
 
-        // 如果不存在，创建新单词（先使用空的释义数据）
-        if (!word) {
-          word = await tx.word.create({
-            data: {
-              wordText,
-              definitionData: {}
+        // 获取新创建的单词ID（需要重新查询以获取生成的ID）
+        const newlyCreatedWords = await tx.word.findMany({
+          where: {
+            wordText: {
+              in: newWords
             }
-          });
-        }
+          },
+          select: {
+            id: true,
+            wordText: true
+          }
+        });
 
-        wordIds.push(word.id);
+        // 合并现有单词和新单词的ID
+        const allWordIds = [
+          ...existingWords.map(w => w.id),
+          ...newlyCreatedWords.map(w => w.id)
+        ];
+
+        // 创建词书记录
+        const newWordlist = await tx.wordlist.create({
+          data: {
+            userId: userId,
+            name: name.trim()
+          }
+        });
+
+        // 批量创建关联记录
+        const entriesToCreate = allWordIds.map(wordId => ({
+          wordlistId: newWordlist.id,
+          wordId
+        }));
+
+        await tx.wordlistEntry.createMany({
+          data: entriesToCreate
+        });
+
+        return {
+          id: newWordlist.id,
+          name: newWordlist.name,
+          wordCount: allWordIds.length
+        };
+      } else {
+        // 只有现有单词的情况
+        const wordIds = existingWords.map(w => w.id);
+
+        // 创建词书记录
+        const newWordlist = await tx.wordlist.create({
+          data: {
+            userId: userId,
+            name: name.trim()
+          }
+        });
+
+        // 批量创建关联记录
+        const entriesToCreate = wordIds.map(wordId => ({
+          wordlistId: newWordlist.id,
+          wordId
+        }));
+
+        await tx.wordlistEntry.createMany({
+          data: entriesToCreate
+        });
+
+        return {
+          id: newWordlist.id,
+          name: newWordlist.name,
+          wordCount: wordIds.length
+        };
       }
-
-      // 创建词书记录
-      const newWordlist = await tx.wordlist.create({
-        data: {
-          userId: userId,
-          name: name.trim()
-        }
-      });
-
-      // 批量创建关联记录
-      const entriesToCreate = wordIds.map(wordId => ({
-        wordlistId: newWordlist.id,
-        wordId
-      }));
-
-      await tx.wordlistEntry.createMany({
-        data: entriesToCreate
-      });
-
-      return {
-        id: newWordlist.id,
-        name: newWordlist.name,
-        wordCount: uniqueWords.length
-      };
     });
 
     // 词书创建成功后，立即初始化学习进度

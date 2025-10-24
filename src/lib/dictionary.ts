@@ -79,11 +79,11 @@ export interface EnglishDefinition {
 export interface PronunciationData {
   american?: {
     phonetic: string; // 美式音标，如 "[ˈbetər]"
-    audioUrl: string; // 美式发音音频URL
+    audioUrl?: string; // 美式发音音频URL
   };
   british?: {
     phonetic: string; // 英式音标，如 "[ˈbetə(r)]"
-    audioUrl: string; // 英式发音音频URL
+    audioUrl?: string; // 英式发音音频URL
   };
 }
 
@@ -175,11 +175,11 @@ export interface WordDataToSave {
   pronunciationData?: {
     american?: {
       phonetic: string;
-      audioUrl: string;
+      audioUrl?: string;
     };
     british?: {
       phonetic: string;
-      audioUrl: string;
+      audioUrl?: string;
     };
   };
   sentences?: Array<{
@@ -1195,7 +1195,7 @@ private delay(ms: number): Promise<void> {
     
     let wordId: number | null = null;
     const errors: Array<{ step: string; error: unknown }> = [];
-    
+
     try {
       // 步骤1: 更新或创建单词记录（必须成功）
       try {
@@ -1226,109 +1226,102 @@ private delay(ms: number): Promise<void> {
         throw error; // 这个步骤必须成功，否则无法继续
       }
 
-      // 步骤2: 保存发音数据（可选）
-      if (cleanedData.pronunciationData && wordId !== null) {
-        try {
-          debugLog(`步骤2: 保存发音数据`);
-          await db.$transaction(async (tx) => {
-            await this.savePronunciationData(tx, wordId!, cleanedData.pronunciationData!);
-          });
-          debugLog(`发音数据已保存`);
-        } catch (error) {
-          errorLog(`步骤2失败: 保存发音数据时出错:`, error);
-          errors.push({ step: '保存发音数据', error });
-          // 不中断整个流程，继续执行其他步骤
-        }
-      }
+      // 步骤2-8: 在单个事务中保存所有相关数据（原子操作，避免竞态条件）
+      if (wordId !== null) {
+        debugLog(`开始保存单词关联数据到数据库（单个事务）`);
+        await db.$transaction(async (tx) => {
+          // 步骤2: 保存发音数据（可选）
+          if (cleanedData.pronunciationData) {
+            try {
+              debugLog(`步骤2: 保存发音数据`);
+              await this.savePronunciationData(tx, wordId!, cleanedData.pronunciationData! as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+              debugLog(`发音数据已保存`);
+            } catch (error) {
+              errorLog(`步骤2失败: 保存发音数据时出错:`, error);
+              errors.push({ step: '保存发音数据', error });
+              // 不中断整个事务，继续执行其他步骤
+            }
+          }
 
-      // 步骤3: 保存释义数据（可选）
-      if (cleanedData.definitions && wordId !== null) {
-        try {
-          debugLog(`步骤3: 保存基本释义数据`);
-          await db.$transaction(async (tx) => {
-            await this.saveDefinitionData(tx, wordId!, cleanedData.definitions!);
-          });
-          debugLog(`基本释义数据已保存`);
-        } catch (error) {
-          errorLog(`步骤3失败: 保存基本释义数据时出错:`, error);
-          errors.push({ step: '保存基本释义数据', error });
-          // 不中断整个流程，继续执行其他步骤
-        }
-      }
+          // 步骤3: 保存释义数据（可选）
+          if (cleanedData.definitions) {
+            try {
+              debugLog(`步骤3: 保存基本释义数据`);
+              await this.saveDefinitionData(tx, wordId!, cleanedData.definitions!);
+              debugLog(`基本释义数据已保存`);
+            } catch (error) {
+              errorLog(`步骤3失败: 保存基本释义数据时出错:`, error);
+              errors.push({ step: '保存基本释义数据', error });
+              // 不中断整个事务，继续执行其他步骤
+            }
+          }
 
-      // 步骤4: 保存权威英汉释义（可选）
-      if (cleanedData.authoritativeDefinitions && wordId !== null) {
-        try {
-          debugLog(`步骤4: 保存权威英汉释义`);
-          await db.$transaction(async (tx) => {
-            await this.saveAuthoritativeDefinitions(tx, wordId!, cleanedData.authoritativeDefinitions!);
-          });
-          debugLog(`权威英汉释义已保存`);
-        } catch (error) {
-          errorLog(`步骤4失败: 保存权威英汉释义时出错:`, error);
-          errors.push({ step: '保存权威英汉释义', error });
-          // 不中断整个流程，继续执行其他步骤
-        }
-      }
+          // 步骤4: 保存权威英汉释义（可选）
+          if (cleanedData.authoritativeDefinitions) {
+            try {
+              debugLog(`步骤4: 保存权威英汉释义`);
+              await this.saveAuthoritativeDefinitions(tx, wordId!, cleanedData.authoritativeDefinitions!);
+              debugLog(`权威英汉释义已保存`);
+            } catch (error) {
+              errorLog(`步骤4失败: 保存权威英汉释义时出错:`, error);
+              errors.push({ step: '保存权威英汉释义', error });
+              // 不中断整个事务，继续执行其他步骤
+            }
+          }
 
-      // 步骤5: 保存英汉释义（可选）
-      if (cleanedData.bilingualDefinitions && wordId !== null) {
-        try {
-          debugLog(`步骤5: 保存英汉释义`);
-          await db.$transaction(async (tx) => {
-            await this.saveBilingualDefinitions(tx, wordId!, cleanedData.bilingualDefinitions!);
-          });
-          debugLog(`英汉释义已保存`);
-        } catch (error) {
-          errorLog(`步骤5失败: 保存英汉释义时出错:`, error);
-          errors.push({ step: '保存英汉释义', error });
-          // 不中断整个流程，继续执行其他步骤
-        }
-      }
+          // 步骤5: 保存英汉释义（可选）
+          if (cleanedData.bilingualDefinitions) {
+            try {
+              debugLog(`步骤5: 保存英汉释义`);
+              await this.saveBilingualDefinitions(tx, wordId!, cleanedData.bilingualDefinitions!);
+              debugLog(`英汉释义已保存`);
+            } catch (error) {
+              errorLog(`步骤5失败: 保存英汉释义时出错:`, error);
+              errors.push({ step: '保存英汉释义', error });
+              // 不中断整个事务，继续执行其他步骤
+            }
+          }
 
-      // 步骤6: 保存英英释义（可选）
-      if (cleanedData.englishDefinitions && wordId !== null) {
-        try {
-          debugLog(`步骤6: 保存英英释义`);
-          await db.$transaction(async (tx) => {
-            await this.saveEnglishDefinitions(tx, wordId!, cleanedData.englishDefinitions!);
-          });
-          debugLog(`英英释义已保存`);
-        } catch (error) {
-          errorLog(`步骤6失败: 保存英英释义时出错:`, error);
-          errors.push({ step: '保存英英释义', error });
-          // 不中断整个流程，继续执行其他步骤
-        }
-      }
+          // 步骤6: 保存英英释义（可选）
+          if (cleanedData.englishDefinitions) {
+            try {
+              debugLog(`步骤6: 保存英英释义`);
+              await this.saveEnglishDefinitions(tx, wordId!, cleanedData.englishDefinitions!);
+              debugLog(`英英释义已保存`);
+            } catch (error) {
+              errorLog(`步骤6失败: 保存英英释义时出错:`, error);
+              errors.push({ step: '保存英英释义', error });
+              // 不中断整个事务，继续执行其他步骤
+            }
+          }
 
-      // 步骤7: 保存例句数据（可选）
-      if (cleanedData.sentences && cleanedData.sentences.length > 0 && wordId !== null) {
-        try {
-          debugLog(`步骤7: 保存例句数据`);
-          await db.$transaction(async (tx) => {
-            await this.saveSentenceData(tx, wordId!, cleanedData.sentences!);
-          });
-          debugLog(`例句数据已保存`);
-        } catch (error) {
-          errorLog(`步骤7失败: 保存例句数据时出错:`, error);
-          errors.push({ step: '保存例句数据', error });
-          // 不中断整个流程，继续执行其他步骤
-        }
-      }
+          // 步骤7: 保存例句数据（可选）
+          if (cleanedData.sentences && cleanedData.sentences.length > 0) {
+            try {
+              debugLog(`步骤7: 保存例句数据`);
+              await this.saveSentenceData(tx, wordId!, cleanedData.sentences!);
+              debugLog(`例句数据已保存`);
+            } catch (error) {
+              errorLog(`步骤7失败: 保存例句数据时出错:`, error);
+              errors.push({ step: '保存例句数据', error });
+              // 不中断整个事务，继续执行其他步骤
+            }
+          }
 
-      // 步骤8: 保存词形变化（可选）
-      if (cleanedData.wordForms && cleanedData.wordForms.length > 0 && wordId !== null) {
-        try {
-          debugLog(`步骤8: 保存词形变化`);
-          await db.$transaction(async (tx) => {
-            await this.saveWordForms(tx, wordId!, cleanedData.wordForms!);
-          });
-          debugLog(`词形变化已保存`);
-        } catch (error) {
-          errorLog(`步骤8失败: 保存词形变化时出错:`, error);
-          errors.push({ step: '保存词形变化', error });
-          // 不中断整个流程，继续执行其他步骤
-        }
+          // 步骤8: 保存词形变化（可选）
+          if (cleanedData.wordForms && cleanedData.wordForms.length > 0) {
+            try {
+              debugLog(`步骤8: 保存词形变化`);
+              await this.saveWordForms(tx, wordId!, cleanedData.wordForms!);
+              debugLog(`词形变化已保存`);
+            } catch (error) {
+              errorLog(`步骤8失败: 保存词形变化时出错:`, error);
+              errors.push({ step: '保存词形变化', error });
+              // 不中断整个事务，继续执行其他步骤
+            }
+          }
+        });
+        debugLog(`单词 ${wordText} 的所有关联数据已在一个事务中完成保存`);
       }
 
       // 记录最终结果
@@ -1784,35 +1777,47 @@ private delay(ms: number): Promise<void> {
   }
 
   private async saveDefinitionData(tx: PrismaTransaction, wordId: number, definitions: DefinitionsToSave): Promise<void> {
-    // 基本释义
+    const allDefinitions: Array<{
+      wordId: number;
+      type: string;
+      partOfSpeech?: string;
+      order: number;
+      meaning?: string;
+    }> = [];
+
+    // 收集基本释义
     if (definitions.basic && definitions.basic.length > 0) {
       for (let i = 0; i < definitions.basic.length; i++) {
         const def = definitions.basic[i];
-        await tx.wordDefinition.create({
-          data: {
-            wordId,
-            type: 'basic',
-            partOfSpeech: def.partOfSpeech,
-            order: i,
-            meaning: def.meaning
-          }
+        allDefinitions.push({
+          wordId,
+          type: 'basic',
+          partOfSpeech: def.partOfSpeech,
+          order: i,
+          meaning: def.meaning
         });
       }
     }
 
-    // 网络释义
+    // 收集网络释义
     if (definitions.web && definitions.web.length > 0) {
       for (let i = 0; i < definitions.web.length; i++) {
         const def = definitions.web[i];
-        await tx.wordDefinition.create({
-          data: {
-            wordId,
-            type: 'web',
-            order: i,
-            meaning: def.meaning
-          }
+        allDefinitions.push({
+          wordId,
+          type: 'web',
+          order: i,
+          meaning: def.meaning
         });
       }
+    }
+
+    // 批量创建所有释义
+    if (allDefinitions.length > 0) {
+      await tx.wordDefinition.createMany({
+        data: allDefinitions,
+        skipDuplicates: true
+      });
     }
   }
 
@@ -1843,82 +1848,131 @@ private delay(ms: number): Promise<void> {
 
         // 创建释义条目
         console.log(`[DEBUG] 创建释义条目，数量: ${authDef.definitions?.length || 0}`);
+
+        // 准备释义条目数据
+        const definitionExamples: Array<{
+          definitionId: number;
+          order: number;
+          english: string;
+          chinese: string;
+        }> = [];
+
+        // 准备释义例句数据
+        const definitionExampleSentences: Array<{
+          definitionId: number;
+          order: number;
+          english: string;
+          chinese: string;
+        }> = [];
+
+        // 收集所有释义条目和例句数据
         for (let defIndex = 0; defIndex < authDef.definitions.length; defIndex++) {
           const defItem = authDef.definitions[defIndex];
-          console.log(`[DEBUG] 创建释义条目 ${defIndex + 1}/${authDef.definitions.length}:`, {
+          console.log(`[DEBUG] 准备释义条目 ${defIndex + 1}/${authDef.definitions.length}:`, {
             number: defItem.number,
             hasEnglish: !!defItem.englishMeaning,
             hasChinese: !!defItem.chineseMeaning,
             hasExamples: defItem.examples?.length || 0
           });
-          
-          await tx.definitionExample.create({
-            data: {
-              definitionId: definition.id,
-              order: defItem.number,
-              english: defItem.englishMeaning || '',
-              chinese: defItem.chineseMeaning || ''
-            }
-          });
-          console.log(`[DEBUG] 释义条目已创建`);
 
-          // 如果有例句，创建例句记录
+          // 添加释义条目
+          definitionExamples.push({
+            definitionId: definition.id,
+            order: defItem.number,
+            english: defItem.englishMeaning || '',
+            chinese: defItem.chineseMeaning || ''
+          });
+
+          // 如果有例句，收集例句数据
           if (defItem.examples && defItem.examples.length > 0) {
-            console.log(`[DEBUG] 创建释义例句，数量: ${defItem.examples.length}`);
+            console.log(`[DEBUG] 收集释义例句，数量: ${defItem.examples.length}`);
             for (let exIndex = 0; exIndex < defItem.examples.length; exIndex++) {
               const example = defItem.examples[exIndex];
-              console.log(`[DEBUG] 创建释义例句 ${exIndex + 1}/${defItem.examples.length}`);
-              await tx.definitionExample.create({
-                data: {
-                  definitionId: definition.id,
-                  order: defItem.number,
-                  english: example.english,
-                  chinese: example.chinese
-                }
+              definitionExampleSentences.push({
+                definitionId: definition.id,
+                order: defItem.number,
+                english: example.english,
+                chinese: example.chinese
               });
             }
-            console.log(`[DEBUG] 释义例句已创建`);
           }
+        }
+
+        // 批量插入释义条目
+        if (definitionExamples.length > 0) {
+          await tx.definitionExample.createMany({
+            data: definitionExamples,
+            skipDuplicates: true
+          });
+          console.log(`[DEBUG] ${definitionExamples.length} 个释义条目已批量创建`);
+        }
+
+        // 批量插入释义例句
+        if (definitionExampleSentences.length > 0) {
+          await tx.definitionExample.createMany({
+            data: definitionExampleSentences,
+            skipDuplicates: true
+          });
+          console.log(`[DEBUG] ${definitionExampleSentences.length} 个释义例句已批量创建`);
         }
 
         // 处理习语
         if (authDef.idioms && authDef.idioms.length > 0) {
           console.log(`[DEBUG] 处理习语，数量: ${authDef.idioms.length}`);
+
+          // 准备习语数据
+          const idiomsToCreate = authDef.idioms.map(idiom => ({
+            definitionId: definition.id,
+            order: idiom.number,
+            title: idiom.title,
+            meaning: idiom.meaning
+          }));
+
+          // 批量创建习语记录
+          const createdIdioms = await Promise.all(
+            idiomsToCreate.map(async (idiomData) => {
+              const idiom = await tx.definitionIdiom.create({
+                data: idiomData
+              });
+              console.log(`[DEBUG] 习语记录已创建，ID: ${idiom.id}`);
+              return { idiom, originalData: idiomData };
+            })
+          );
+
+          // 准备习语例句数据
+          const idiomExamples: Array<{
+            idiomId: number;
+            order: number;
+            english: string;
+            chinese: string;
+          }> = [];
+
+          // 收集所有习语例句
           for (let idiomIndex = 0; idiomIndex < authDef.idioms.length; idiomIndex++) {
             const idiom = authDef.idioms[idiomIndex];
-            console.log(`[DEBUG] 创建习语记录 ${idiomIndex + 1}/${authDef.idioms.length}:`, {
-              number: idiom.number,
-              title: idiom.title,
-              hasExamples: idiom.examples?.length || 0
-            });
-            
-            const idiomRecord = await tx.definitionIdiom.create({
-              data: {
-                definitionId: definition.id,
-                order: idiom.number,
-                title: idiom.title,
-                meaning: idiom.meaning
-              }
-            });
-            console.log(`[DEBUG] 习语记录已创建，ID: ${idiomRecord.id}`);
+            const createdIdiom = createdIdioms[idiomIndex].idiom;
 
-            // 创建习语例句
             if (idiom.examples && idiom.examples.length > 0) {
-              console.log(`[DEBUG] 创建习语例句，数量: ${idiom.examples.length}`);
+              console.log(`[DEBUG] 收集习语例句，数量: ${idiom.examples.length}`);
               for (let exIndex = 0; exIndex < idiom.examples.length; exIndex++) {
                 const example = idiom.examples[exIndex];
-                console.log(`[DEBUG] 创建习语例句 ${exIndex + 1}/${idiom.examples.length}`);
-                await tx.idiomExample.create({
-                  data: {
-                    idiomId: idiomRecord.id,
-                    order: 0,
-                    english: example.english,
-                    chinese: example.chinese
-                  }
+                idiomExamples.push({
+                  idiomId: createdIdiom.id,
+                  order: 0,
+                  english: example.english,
+                  chinese: example.chinese
                 });
               }
-              console.log(`[DEBUG] 习语例句已创建`);
             }
+          }
+
+          // 批量创建习语例句
+          if (idiomExamples.length > 0) {
+            await tx.idiomExample.createMany({
+              data: idiomExamples,
+              skipDuplicates: true
+            });
+            console.log(`[DEBUG] ${idiomExamples.length} 个习语例句已批量创建`);
           }
         }
         
@@ -1943,63 +1997,96 @@ private delay(ms: number): Promise<void> {
         }
       });
 
-      // 创建释义条目
-      for (const defItem of bilDef.definitions) {
-        await tx.definitionExample.create({
-          data: {
-            definitionId: definition.id,
-            order: defItem.number,
-            english: '',
-            chinese: defItem.meaning
-          }
+      // 准备释义条目数据
+      const definitionExamples = bilDef.definitions.map(defItem => ({
+        definitionId: definition.id,
+        order: defItem.number,
+        english: '',
+        chinese: defItem.meaning
+      }));
+
+      // 批量创建释义条目
+      if (definitionExamples.length > 0) {
+        await tx.definitionExample.createMany({
+          data: definitionExamples,
+          skipDuplicates: true
         });
       }
     }
   }
 
   private async saveEnglishDefinitions(tx: PrismaTransaction, wordId: number, englishDefinitions: EnglishDefinition[]): Promise<void> {
+    const allDefinitions: Array<{
+      wordId: number;
+      type: string;
+      partOfSpeech: string;
+      order: number;
+      meaning: string;
+      linkedWords?: string | null;
+    }> = [];
+
+    // 收集所有英英释义
     for (const engDef of englishDefinitions) {
-      // 创建释义条目
       for (const defItem of engDef.definitions) {
-        await tx.wordDefinition.create({
-          data: {
-            wordId,
-            type: 'english',
-            partOfSpeech: engDef.partOfSpeech,
-            order: defItem.number,
-            meaning: defItem.meaning,
-            linkedWords: defItem.linkedWords ? JSON.stringify(defItem.linkedWords) : null
-          }
+        allDefinitions.push({
+          wordId,
+          type: 'english',
+          partOfSpeech: engDef.partOfSpeech,
+          order: defItem.number,
+          meaning: defItem.meaning,
+          linkedWords: defItem.linkedWords ? JSON.stringify(defItem.linkedWords) : null
         });
       }
     }
-  }
 
-  private async saveSentenceData(tx: PrismaTransaction, wordId: number, sentences: Sentence[]): Promise<void> {
-    for (const sentence of sentences) {
-      await tx.wordSentence.create({
-        data: {
-          wordId,
-          order: sentence.number,
-          english: sentence.english,
-          chinese: sentence.chinese,
-          audioUrl: sentence.audioUrl,
-          source: sentence.source
-        }
+    // 批量创建所有释义
+    if (allDefinitions.length > 0) {
+      await tx.wordDefinition.createMany({
+        data: allDefinitions,
+        skipDuplicates: true
       });
     }
   }
 
+  private async saveSentenceData(tx: PrismaTransaction, wordId: number, sentences: Sentence[]): Promise<void> {
+    if (sentences.length === 0) return;
+
+    // 准备批量插入数据
+    const sentenceData = sentences.map(sentence => ({
+      wordId,
+      order: sentence.number,
+      english: sentence.english,
+      chinese: sentence.chinese,
+      audioUrl: sentence.audioUrl,
+      source: sentence.source
+    }));
+
+    // 批量插入所有例句
+    await tx.wordSentence.createMany({
+      data: sentenceData,
+      skipDuplicates: true
+    });
+  }
+
   private async saveWordForms(tx: PrismaTransaction, wordId: number, wordForms: Array<{ form: string; word: string }>): Promise<void> {
-    for (const wordForm of wordForms) {
-      await tx.$executeRaw`
-        INSERT INTO WordForms (word_id, form_type, form_word, created_at, updated_at)
-        VALUES (${wordId}, ${wordForm.form}, ${wordForm.word}, NOW(), NOW())
-        ON DUPLICATE KEY UPDATE
-        form_word = ${wordForm.word},
-        updated_at = NOW()
-      `;
-    }
+    if (wordForms.length === 0) return;
+
+    // 构建批量插入的数据 - 修复：使用 Prisma 的参数化查询
+    const values = wordForms.map(wordForm => {
+      // 转义单引号以防止 SQL 注入
+      const escapedForm = wordForm.form.replace(/'/g, "''");
+      const escapedWord = wordForm.word.replace(/'/g, "''");
+      return `(${wordId}, '${escapedForm}', '${escapedWord}', NOW(), NOW())`;
+    }).join(', ');
+
+    // 执行批量插入 - 使用参数化查询防止 SQL 注入
+    await tx.$executeRawUnsafe(`
+      INSERT INTO WordForms (word_id, form_type, form_word, created_at, updated_at)
+      VALUES ${values}
+      ON DUPLICATE KEY UPDATE
+      form_word = VALUES(form_word),
+      updated_at = NOW()
+    `);
   }
 }
 
