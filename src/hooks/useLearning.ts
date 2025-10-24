@@ -267,12 +267,49 @@ export function useLearning() {
     try {
       if (sessionType === 'test') {
         // 测试模式：获取词书中的所有单词
-        const response = await authFetch(`/api/wordlists/${wordlistId}`);
-        const data = await response.json();
+        console.log(`🧪 开始测试模式 [wordlistId: ${wordlistId}]`);
 
-        if (data.success) {
+        if (!wordlistId) {
+          console.error('❌ 测试模式失败：缺少词书ID');
+          setError('词书ID缺失，无法启动测试模式');
+          return false;
+        }
+
+        const response = await authFetch(`/api/wordlists/${wordlistId}`);
+
+        if (!response.ok) {
+          console.error(`❌ API请求失败: ${response.status} ${response.statusText}`);
+          setError(`获取词书失败: ${response.status} ${response.statusText}`);
+          return false;
+        }
+
+        const data = await response.json();
+        console.log(`📖 收到词书数据:`, {
+          success: data.success,
+          wordlistExists: !!data.wordlist,
+          wordsCount: data.wordlist?.words?.length || 0,
+          error: data.error
+        });
+
+        if (data.success && data.wordlist && data.wordlist.words) {
           const words: string[] = data.wordlist.words.map((word: { wordText: string }) => word.wordText);
+          console.log(`📝 提取单词列表:`, {
+            totalWords: words.length,
+            wordSample: words.slice(0, 5)
+          });
+
+          if (words.length === 0) {
+            console.warn('⚠️ 词书中没有单词');
+            setError('该词书中没有单词，请先添加单词');
+            return false;
+          }
+
           const shuffledWords: string[] = shuffleArray(words);
+          console.log(`🔀 打乱后的单词队列:`, {
+            totalWords: shuffledWords.length,
+            firstWord: shuffledWords[0],
+            lastWord: shuffledWords[shuffledWords.length - 1]
+          });
 
           setLearningState({
             sessionType,
@@ -284,12 +321,15 @@ export function useLearning() {
             wordlistId
           });
 
+          console.log('✅ 测试模式初始化成功');
+
           // 触发预加载前几个单词
           triggerPreload(shuffledWords, 0);
 
           return true;
         } else {
-          setError(data.error || 'Failed to fetch wordlist');
+          console.error('❌ 获取词书数据失败:', data.error || '未知错误');
+          setError(data.error || '获取词书数据失败');
           return false;
         }
       } else {
@@ -605,11 +645,23 @@ export function useLearning() {
 
 // 工具函数：随机打乱数组
 function shuffleArray<T>(array: T[]): T[] {
+  if (!Array.isArray(array)) {
+    console.error('❌ shuffleArray: 输入不是数组', array);
+    return [];
+  }
+
+  if (array.length === 0) {
+    console.warn('⚠️ shuffleArray: 输入数组为空');
+    return [];
+  }
+
   const newArray = [...array];
   for (let i = newArray.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
   }
+
+  console.log(`🔀 数组打乱完成: ${array.length} -> ${newArray.length}`);
   return newArray;
 }
 

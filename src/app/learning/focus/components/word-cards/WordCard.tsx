@@ -49,7 +49,7 @@ const WordCard = React.memo<WordCardProps>(({
                   (card.isColliding ? '0 6px 12px rgba(255, 107, 107, 0.3)' : '0 2px 4px rgba(0, 0, 0, 0.05)'),
         transition: card.isDragging || card.isColliding ? 'none' : 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
         zIndex: card.isDragging ? 25 : (card.isColliding ? 20 : (isExpanded ? 15 : 10)),
-        opacity: card.isAnimating ? 0 : (card.isDragging ? 0.8 : 1),
+        opacity: card.isDragging ? 0.8 : 1,
         transform: `translate(-50%, -50%) ${card.isAnimating ? 'scale(0.8)' : 'scale(1)'} ${card.isDragging ? 'scale(1.05)' : ''} ${card.collisionScale ? `scale(${card.collisionScale})` : ''}`,
         userSelect: 'none',
         willChange: card.isDragging || card.isColliding ? 'transform, box-shadow' : 'auto'

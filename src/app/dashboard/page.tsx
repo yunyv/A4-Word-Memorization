@@ -40,7 +40,7 @@ export default function DashboardPage() {
 
   // 处理开始测试
   const handleStartTest = (wordlistId: number) => {
-        router.push(`/test?wordlistId=${wordlistId}`);
+        router.push(`/learning/test/${wordlistId}`);
   };
 
   // 处理设置
@@ -148,9 +148,22 @@ export default function DashboardPage() {
               学习新单词
             </Button>
             
-            <Button 
+            <Button
               variant="outline"
-              onClick={() => router.push('/test')}
+              onClick={() => {
+                // 找到第一个可用的词书进行测试
+                const wordlists = document.querySelector('[data-wordlists-container]');
+                if (wordlists) {
+                  const firstWordlistButton = wordlists.querySelector('button[data-test-button]');
+                  if (firstWordlistButton) {
+                    (firstWordlistButton as HTMLButtonElement).click();
+                  } else {
+                    alert('请先上传词书才能进行测试');
+                  }
+                } else {
+                  alert('请先上传词书才能进行测试');
+                }
+              }}
               className="flex items-center justify-center gap-2 h-12"
             >
               <div className="w-5 h-5 rounded-full bg-gray-400 opacity-80"></div>

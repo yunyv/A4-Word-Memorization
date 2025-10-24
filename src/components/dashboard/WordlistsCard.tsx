@@ -42,6 +42,7 @@ function WordlistItem({ wordlist, onStartLearning, onStartTest, onDelete }: Word
           size="sm"
           onClick={() => onStartTest(wordlist.id)}
           className="flex items-center gap-1"
+          data-test-button
         >
           <FileText className="h-4 w-4" />
           测试
@@ -287,7 +288,7 @@ export function WordlistsCard({
               </Button>
             </div>
           ) : (
-            <div className="space-y-0">
+            <div className="space-y-0" data-wordlists-container>
               {wordlists.map((wordlist) => (
                 <WordlistItem
                   key={wordlist.id}

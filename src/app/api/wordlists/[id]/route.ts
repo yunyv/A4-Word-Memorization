@@ -177,6 +177,13 @@ export async function GET(
       }))
     };
 
+    // 添加调试日志
+    console.log(`📚 获取词书详情 [${wordlistId}]`, {
+      wordlistName: wordlist.name,
+      totalWords: formattedWordlist.words.length,
+      wordSample: formattedWordlist.words.slice(0, 3).map(w => w.wordText)
+    });
+
     return NextResponse.json({
       success: true,
       wordlist: formattedWordlist
