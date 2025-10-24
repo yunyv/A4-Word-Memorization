@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useCallback, Suspense } from 'react';
+import { useRouter } from 'next/navigation';
 import { DefinitionSettingsModal } from '@/components/learning/DefinitionSettingsModal';
 import { usePhysicsLogic } from './components/physics';
 import { useAudioPlayer } from './components/audio';
@@ -21,6 +22,7 @@ import { WordDefinitionData } from './components/types';
 function FocusLearningContent() {
   // 使用统一的状态管理 Hook
   const state = useFocusLearningState();
+  const router = useRouter();
   
   // 使用物理逻辑 Hook
   const physicsLogic = usePhysicsLogic({
@@ -234,7 +236,7 @@ function FocusLearningContent() {
             {state.error}
           </p>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => router.refresh()}
             className="px-6 py-2 rounded-lg font-medium transition-colors"
             style={{
               backgroundColor: 'var(--color-focus-blue)',

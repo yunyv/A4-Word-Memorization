@@ -32,6 +32,11 @@ class ErrorBoundary extends Component<Props, State> {
     console.error('Focus Learning Error Boundary caught an error:', error, errorInfo);
   }
 
+  private handleRefresh = () => {
+    // 使用 window.location.replace 而不是 reload，减少页面闪烁
+    window.location.replace(window.location.pathname);
+  };
+
   render() {
     if (this.state.hasError) {
       // 你可以自定义降级后的 UI 并渲染
@@ -49,7 +54,7 @@ class ErrorBoundary extends Component<Props, State> {
             </p>
             <div className="space-y-3">
               <button
-                onClick={() => window.location.reload()}
+                onClick={this.handleRefresh}
                 className="px-6 py-2 rounded-lg font-medium transition-colors"
                 style={{
                   backgroundColor: 'var(--color-focus-blue)',

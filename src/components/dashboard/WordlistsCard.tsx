@@ -3,8 +3,8 @@
 import { useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { useWordlists, validateWordlistFile, parseWordlistFile } from '@/hooks/useWordlist';
-import { WordlistWithCount, WordlistItemProps } from '@/types/wordlist';
+import { useWordlists, validateWordlistFile } from '@/hooks/useWordlist';
+import { WordlistItemProps } from '@/types/wordlist';
 import { Upload, Plus, Trash2, BookOpen, FileText } from 'lucide-react';
 
 // 词书项组件
@@ -217,14 +217,14 @@ function UploadWordlistModal({
 }
 
 // 词书卡片主组件
-export function WordlistsCard({ 
-  onStartLearning, 
-  onStartTest 
-}: { 
+export function WordlistsCard({
+  onStartLearning,
+  onStartTest
+}: {
   onStartLearning: (id: number) => void;
   onStartTest: (id: number) => void;
 }) {
-  const { wordlists, isLoading, error, uploadWordlist, deleteWordlist } = useWordlists();
+  const { wordlists, isLoading, error, uploadWordlist, deleteWordlist, fetchWordlists } = useWordlists();
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
   const handleUpload = async (name: string, file: File) => {
@@ -236,6 +236,11 @@ export function WordlistsCard({
 
   const handleDelete = async (id: number) => {
     await deleteWordlist(id);
+  };
+
+  // 重试函数
+  const handleRetry = () => {
+    fetchWordlists();
   };
 
   return (
@@ -266,7 +271,7 @@ export function WordlistsCard({
           ) : error ? (
             <div className="text-center py-8">
               <p className="text-red-600 mb-2">{error}</p>
-              <Button variant="outline" onClick={() => window.location.reload()}>
+              <Button variant="outline" onClick={handleRetry}>
                 重试
               </Button>
             </div>

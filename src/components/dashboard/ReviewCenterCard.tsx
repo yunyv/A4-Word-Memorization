@@ -34,7 +34,7 @@ export function ReviewCenterCard({ wordlistId, onStartReview, onStartTest }: Lea
     if (isInitialized.current && wordlistId === undefined) {
       return;
     }
-    
+
     const fetchStats = async () => {
       setIsLoading(true);
       setError(null);
@@ -55,6 +55,24 @@ export function ReviewCenterCard({ wordlistId, onStartReview, onStartTest }: Lea
     fetchStats();
     isInitialized.current = true;
   }, [wordlistId, getLearningProgressStats]);
+
+  // 重试函数
+  const handleRetry = async () => {
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      const data = await getLearningProgressStats(wordlistId);
+      if (data) {
+        setStats(data);
+      }
+    } catch (err) {
+      console.error('Error fetching learning stats:', err);
+      setError('Failed to fetch learning stats');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // 格式化日期
   const formatDate = (dateString: string) => {
@@ -101,7 +119,7 @@ export function ReviewCenterCard({ wordlistId, onStartReview, onStartTest }: Lea
         <CardContent>
           <div className="text-center py-8">
             <p className="text-red-600 mb-2">{error}</p>
-            <Button variant="outline" onClick={() => window.location.reload()}>
+            <Button variant="outline" onClick={handleRetry}>
               重试
             </Button>
           </div>

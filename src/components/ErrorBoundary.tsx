@@ -17,6 +17,7 @@ interface State {
 }
 
 export class ErrorBoundary extends Component<Props, State> {
+
   public state: State = {
     hasError: false
   };
@@ -31,13 +32,18 @@ export class ErrorBoundary extends Component<Props, State> {
       error,
       errorInfo
     });
-    
+
     // 这里可以添加错误日志上报逻辑
     // logErrorToService(error, errorInfo);
   }
 
   private handleReset = () => {
     this.setState({ hasError: false, error: undefined, errorInfo: undefined });
+  };
+
+  private handleRefresh = () => {
+    // 使用 window.location.replace 而不是 reload，减少页面闪烁
+    window.location.replace(window.location.pathname);
   };
 
   public render() {
@@ -74,9 +80,9 @@ export class ErrorBoundary extends Component<Props, State> {
                   重试
                 </Button>
                 
-                <Button 
-                  variant="outline" 
-                  onClick={() => window.location.reload()} 
+                <Button
+                  variant="outline"
+                  onClick={this.handleRefresh}
                   className="flex-1"
                 >
                   刷新页面

@@ -4,7 +4,133 @@
  */
 
 import { db } from '../lib/db';
-import { validateWordDataCompleteness } from '../lib/dictionary';
+import { validateWordDataCompleteness, WordDataToSave } from '../lib/dictionary';
+
+// 定义发音数据接口
+interface PronunciationData {
+  american?: {
+    phonetic: string;
+    audioUrl?: string;
+  };
+  british?: {
+    phonetic: string;
+    audioUrl?: string;
+  };
+}
+
+// 定义从数据库获取的原始数据结构
+interface WordDataFromDB {
+  id: number;
+  wordText: string;
+  pronunciation?: string;
+  pronunciations: Array<{
+    type: string;
+    phonetic: string;
+    audioUrl?: string;
+  }>;
+  definitions: Array<{
+    type: string;
+    partOfSpeech?: string;
+    order: number;
+    meaning?: string;
+    chineseMeaning?: string;
+    englishMeaning?: string;
+    definitionNumber?: number;
+    linkedWords?: string;
+  }>;
+  sentences: Array<{
+    order: number;
+    english: string;
+    chinese?: string;
+    audioUrl?: string;
+    source?: string;
+  }>;
+  wordForms: Array<{
+    formType: string;
+    formWord: string;
+  }>;
+  definitionExamples: Array<{
+    definitionId: number;
+    order: number;
+    english: string;
+    chinese?: string;
+  }>;
+  definitionIdioms: Array<{
+    id: number;
+    definitionId: number;
+    order: number;
+    title: string;
+    meaning: string;
+  }>;
+  idiomExamples: Array<{
+    idiomId: number;
+    order: number;
+    english: string;
+    chinese?: string;
+  }>;
+}
+
+// 定义转换后的结果结构
+interface WordDataResult {
+  pronunciation?: string;
+  definitions: {
+    basic: Array<{ partOfSpeech: string; meaning: string }>;
+    web: Array<{ meaning: string }>;
+  };
+  pronunciationData: PronunciationData;
+  sentences: Array<{
+    number: number;
+    english: string;
+    chinese?: string;
+    audioUrl?: string;
+    source?: string;
+  }>;
+  authoritativeDefinitions: Array<{
+    partOfSpeech: string;
+    definitions: Array<{
+      number: number;
+      chineseMeaning: string;
+      englishMeaning: string;
+    }>;
+  }>;
+  bilingualDefinitions: Array<{
+    partOfSpeech: string;
+    definitions: Array<{
+      number: number;
+      meaning: string;
+    }>;
+  }>;
+  englishDefinitions: Array<{
+    partOfSpeech: string;
+    definitions: Array<{
+      number: number;
+      meaning: string;
+      linkedWords?: string[];
+    }>;
+  }>;
+  wordForms: Array<{
+    form: string;
+    word: string;
+  }>;
+}
+
+// 定义修复选项接口
+interface FixOptions {
+  verbose?: boolean;
+}
+
+// 定义不完整单词项接口
+interface IncompleteWordItem {
+  wordText: string;
+  status: string;
+  issue: string;
+  validation: {
+    isComplete: boolean;
+    isPartiallyValid: boolean;
+    missingFields: string[];
+    issues: string[];
+  } | null;
+}
 
 // 从新表结构中获取单词数据的函数（复制自 route.ts）
 async function getWordFromTables(wordText: string) {
@@ -72,7 +198,7 @@ async function getWordFromTables(wordText: string) {
 }
 
 // 将表结构数据转换为JSON格式
-function convertTablesToJson(word: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
+function convertTablesToJson(word: WordDataFromDB) {
   const hasValidData =
     (word.pronunciations && word.pronunciations.length > 0) ||
     (word.definitions && word.definitions.length > 0) ||
@@ -86,7 +212,7 @@ function convertTablesToJson(word: any) { // eslint-disable-line @typescript-esl
     return null;
   }
 
-  const result = {
+  const result: WordDataResult = {
     pronunciation: word.pronunciation || undefined,
     definitions: {
       basic: [],
@@ -102,24 +228,24 @@ function convertTablesToJson(word: any) { // eslint-disable-line @typescript-esl
 
   // 处理发音数据
   if (word.pronunciations && word.pronunciations.length > 0) {
-    word.pronunciations.forEach((pron: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+    word.pronunciations.forEach((pron) => {
       if (pron.type === 'american') {
-        (result.pronunciationData as any).american = {
+        result.pronunciationData.american = {
           phonetic: pron.phonetic,
           audioUrl: pron.audioUrl
-        }; // eslint-disable-line @typescript-eslint/no-explicit-any
+        };
       } else if (pron.type === 'british') {
-        (result.pronunciationData as any).british = {
+        result.pronunciationData.british = {
           phonetic: pron.phonetic,
           audioUrl: pron.audioUrl
-        }; // eslint-disable-line @typescript-eslint/no-explicit-any
+        };
       }
     });
   }
 
   // 处理释义数据
   if (word.definitions && word.definitions.length > 0) {
-    word.definitions.forEach((def: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+    word.definitions.forEach((def) => {
       if (def.type === 'basic') {
         result.definitions!.basic!.push({
           partOfSpeech: def.partOfSpeech || '',
@@ -136,7 +262,7 @@ function convertTablesToJson(word: any) { // eslint-disable-line @typescript-esl
 
   // 处理例句和词形
   if (word.sentences && word.sentences.length > 0) {
-    result.sentences = word.sentences.map((sentence: any) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
+    result.sentences = word.sentences.map((sentence) => ({
       number: sentence.order,
       english: sentence.english,
       chinese: sentence.chinese,
@@ -146,7 +272,7 @@ function convertTablesToJson(word: any) { // eslint-disable-line @typescript-esl
   }
 
   if (word.wordForms && word.wordForms.length > 0) {
-    result.wordForms = word.wordForms.map((form: any) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
+    result.wordForms = word.wordForms.map((form) => ({
       form: form.formType,
       word: form.formWord
     }));
@@ -214,7 +340,7 @@ export async function scanIncompleteData(options: FixOptions = {}) {
       }
     } else {
       // 验证数据完整性
-      const validation = validateWordDataCompleteness(wordData);
+      const validation = validateWordDataCompleteness(wordData as unknown as WordDataToSave);
 
       if (!validation.isComplete) {
         incompleteWords.push({
@@ -248,7 +374,7 @@ export async function scanIncompleteData(options: FixOptions = {}) {
  * 修复不完整的数据
  * 将不完整的单词状态重置为 PENDING，以便重新爬取
  */
-export async function fixIncompleteData(incompleteWords: any[], options: FixOptions = {}) { // eslint-disable-line @typescript-eslint/no-explicit-any
+export async function fixIncompleteData(incompleteWords: IncompleteWordItem[], options: FixOptions = {}) {
   const { verbose = false } = options;
 
   console.log(`[FIX] 开始修复 ${incompleteWords.length} 个不完整的单词\n`);

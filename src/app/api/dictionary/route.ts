@@ -578,15 +578,30 @@ function convertTablesToJson(word: WordDataAssembled): WordDefinitionData | null
           definitions: []
         };
 
-        // 处理释义条目
+        // 处理释义条目 - 修复：从 DefinitionExamples 表中提取释义（不是例句）
         const examples = word.definitionExamples?.filter((ex) => ex.definitionId === def.id);
         if (examples && examples.length > 0) {
           examples.forEach((example) => {
-            authDef.definitions.push({
-              number: example.order,
-              chineseMeaning: example.chinese,
-              englishMeaning: example.english
-            });
+            // 对于权威英汉释义，需要同时有中英文
+            if (example.chinese && example.english) {
+              // 判断是否是释义而不是例句
+              // 规则1：中文包含分号、顿号通常是释义
+              // 规则2：中文很短（<30字符）且英文以小写开头通常是释义
+              // 规则3：英文不是完整句子（没有主谓宾结构）通常是释义
+              const isDefinition =
+                example.chinese.includes('；') ||
+                example.chinese.includes('、') ||
+                (example.chinese.length < 30 && !/^[A-Z]/.test(example.english)) ||
+                (example.chinese.length < 20 && example.english.split(' ').length <= 4);
+
+              if (isDefinition) {
+                authDef.definitions.push({
+                  number: example.order,
+                  chineseMeaning: example.chinese,
+                  englishMeaning: example.english
+                });
+              }
+            }
           });
         }
 
@@ -635,13 +650,17 @@ function convertTablesToJson(word: WordDataAssembled): WordDefinitionData | null
           definitions: []
         };
 
+        // 处理释义条目 - 修复：释义数据存储在 DefinitionExamples 表中
         const examples = word.definitionExamples?.filter((ex) => ex.definitionId === def.id);
         if (examples && examples.length > 0) {
           examples.forEach((example) => {
-            bilDef.definitions.push({
-              number: example.order,
-              meaning: example.chinese
-            });
+            // 对于英汉释义，只需要中文释义
+            if (example.chinese) {
+              bilDef.definitions.push({
+                number: example.order,
+                meaning: example.chinese
+              });
+            }
           });
         }
 

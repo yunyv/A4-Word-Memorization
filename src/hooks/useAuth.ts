@@ -177,7 +177,7 @@ export function getAuthHeaders(options: RequestInit = {}): Record<string, string
 // 带认证的fetch请求辅助函数
 export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const authHeaders = getAuthHeaders(options);
-  
+
   const defaultOptions: RequestInit = {
     headers: {
       ...authHeaders,
@@ -187,16 +187,17 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
   };
 
   const response = await fetch(url, defaultOptions);
-  
+
   // 如果返回401，说明认证失效，清除本地存储
   if (response.status === 401 && typeof window !== 'undefined') {
     try {
       localStorage.removeItem('auth-token');
-      window.location.href = '/token';
+      // 使用客户端导航而不是强制刷新
+      window.location.replace('/token');
     } catch (error) {
       console.warn('无法访问 localStorage 或重定向:', error);
     }
   }
-  
+
   return response;
 }
