@@ -62,32 +62,6 @@ const WordCard = React.memo<WordCardProps>(({
       }}
     >
       {card.text}
-      
-      {/* 拖动指示器 */}
-      <div style={{
-        position: 'absolute',
-        right: '8px',
-        top: '50%',
-        transform: 'translateY(-50%)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '2px',
-        opacity: 0.6,
-        pointerEvents: 'none'
-      }}>
-        <div style={{
-          width: '4px',
-          height: '4px',
-          borderRadius: '50%',
-          backgroundColor: 'var(--color-rock-gray)'
-        }} />
-        <div style={{
-          width: '4px',
-          height: '4px',
-          borderRadius: '50%',
-          backgroundColor: 'var(--color-rock-gray)'
-        }} />
-      </div>
     </div>
   );
 });
