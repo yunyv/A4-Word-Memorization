@@ -533,12 +533,12 @@ function convertTablesToJson(word: WordDataAssembled): WordDefinitionData | null
       if (pron.type === 'american') {
         result.pronunciationData!.american = {
           phonetic: pron.phonetic,
-          audioUrl: pron.audioUrl || undefined
+          audioUrl: pron.audio_url || undefined  // 修复字段映射：使用 audio_url
         } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
       } else if (pron.type === 'british') {
         result.pronunciationData!.british = {
           phonetic: pron.phonetic,
-          audioUrl: pron.audioUrl || undefined
+          audioUrl: pron.audio_url || undefined  // 修复字段映射：使用 audio_url
         } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
       }
     });
@@ -556,7 +556,7 @@ function convertTablesToJson(word: WordDataAssembled): WordDefinitionData | null
       }
 
       const typeGroup = groupedDefinitions.get(type)!;
-      const partOfSpeech = def.partOfSpeech || '';
+      const partOfSpeech = def.part_of_speech || '';
 
       if (!typeGroup.has(partOfSpeech)) {
         typeGroup.set(partOfSpeech, []);
@@ -622,7 +622,7 @@ function convertTablesToJson(word: WordDataAssembled): WordDefinitionData | null
         // 处理普通释义条目
         defs.forEach((def) => {
           // 检查是否是习语（通过查看是否有对应的习语记录）
-          const hasIdiomRecord = word.definitionIdioms?.some(idiom => idiom.definitionId === def.id);
+          const hasIdiomRecord = word.definitionIdioms?.some(idiom => idiom.definition_id === def.id);
 
           if (!hasIdiomRecord && (def.chinese_meaning || def.english_meaning)) {
             const definitionItem: {
@@ -640,7 +640,7 @@ function convertTablesToJson(word: WordDataAssembled): WordDefinitionData | null
             };
 
             // 获取该释义的例句
-            const examples = word.definitionExamples?.filter((ex) => ex.definitionId === def.id);
+            const examples = word.definitionExamples?.filter((ex) => ex.definition_id === def.id);
             if (examples && examples.length > 0) {
               definitionItem.examples = examples.map((example) => ({
                 english: example.english,
@@ -654,7 +654,7 @@ function convertTablesToJson(word: WordDataAssembled): WordDefinitionData | null
 
         // 处理习语
         const idioms = word.definitionIdioms?.filter((id) =>
-          defs.some(def => def.id === id.definitionId)
+          defs.some(def => def.id === id.definition_id)
         );
         if (idioms && idioms.length > 0) {
           authDef.idioms = [];
@@ -674,7 +674,7 @@ function convertTablesToJson(word: WordDataAssembled): WordDefinitionData | null
             };
 
             // 处理习语例句
-            const idiomExamples = word.idiomExamples?.filter((ex) => ex.idiomId === idiom.id);
+            const idiomExamples = word.idiomExamples?.filter((ex) => ex.idiom_id === idiom.id);
             if (idiomExamples && idiomExamples.length > 0) {
               idiomItem.examples = idiomExamples.map((ex) => ({
                 english: ex.english,
@@ -727,7 +727,7 @@ function convertTablesToJson(word: WordDataAssembled): WordDefinitionData | null
             };
 
             // 获取该释义的例句
-            const examples = word.definitionExamples?.filter((ex) => ex.definitionId === def.id);
+            const examples = word.definitionExamples?.filter((ex) => ex.definition_id === def.id);
             if (examples && examples.length > 0) {
               definitionItem.examples = examples.map((example) => ({
                 english: example.english,
@@ -784,8 +784,8 @@ function convertTablesToJson(word: WordDataAssembled): WordDefinitionData | null
     result.sentences = word.sentences.map((sentence) => ({
       number: sentence.order,
       english: sentence.english,
-      chinese: sentence.chinese,
-      audioUrl: sentence.audioUrl || undefined,
+      chinese: sentence.chinese || '',  // 处理 null 情况
+      audioUrl: sentence.audio_url || undefined,  // 修复字段映射：使用 audio_url
       source: sentence.source || undefined
     }));
   }
@@ -793,8 +793,8 @@ function convertTablesToJson(word: WordDataAssembled): WordDefinitionData | null
   // 处理词形变化
   if (word.wordForms && word.wordForms.length > 0) {
     result.wordForms = word.wordForms.map((form) => ({
-      form: form.formType,
-      word: form.formWord
+      form: form.form_type,  // 修复字段映射：使用 form_type 而不是 formType
+      word: form.form_word   // 修复字段映射：使用 form_word 而不是 formWord
     }));
   }
 

@@ -10,80 +10,105 @@ export interface WordDataWithId {
   updatedAt: Date;
 }
 
-export interface PronunciationRecord {
+// 原始数据库查询结果类型（使用下划线命名）
+export interface PronunciationRecordRaw {
   id: number;
-  wordId: number;
+  word_id: number;
   type: string;
   phonetic: string;
-  audioUrl?: string | null;
-  createdAt: Date;
-  updatedAt: Date;
+  audio_url?: string | null;
+  created_at: Date;
+  updated_at: Date;
 }
 
-export interface DefinitionRecord {
+// 直接使用原始类型作为接口名
+export type PronunciationRecord = PronunciationRecordRaw;
+
+// 原始数据库查询结果类型（使用下划线命名）
+export interface DefinitionRecordRaw {
   id: number;
-  wordId: number;
+  word_id: number;
   type: string;
-  partOfSpeech?: string | null;
+  part_of_speech?: string | null; // 数据库字段名（下划线）
   meaning?: string | null;
-  chinese_meaning?: string | null; // 数据库字段名
-  english_meaning?: string | null; // 数据库字段名
-  definition_number?: number | null; // 数据库字段名
+  chinese_meaning?: string | null; // 数据库字段名（下划线）
+  english_meaning?: string | null; // 数据库字段名（下划线）
+  definition_number?: number | null; // 数据库字段名（下划线）
   order?: number;
   linkedWords?: string | null;
-  createdAt: Date;
-  updatedAt: Date;
+  created_at: Date;
+  updated_at: Date;
 }
 
-export interface SentenceRecord {
+// 直接使用原始类型作为接口名
+export type DefinitionRecord = DefinitionRecordRaw;
+
+// 原始数据库查询结果类型（使用下划线命名）
+export interface SentenceRecordRaw {
   id: number;
-  wordId: number;
+  word_id: number;
   order: number;
   english: string;
-  chinese: string;
-  audioUrl?: string | null;
+  chinese?: string | null;
+  audio_url?: string | null;
   source?: string | null;
-  createdAt: Date;
-  updatedAt: Date;
+  created_at: Date;
+  updated_at: Date;
 }
 
-export interface WordFormRecord {
+// 直接使用原始类型作为接口名
+export type SentenceRecord = SentenceRecordRaw;
+
+// 原始数据库查询结果类型（使用下划线命名）
+export interface WordFormRecordRaw {
   id: number;
-  wordId: number;
-  formType: string;
-  formWord: string;
-  createdAt: Date;
-  updatedAt: Date;
+  word_id: number;
+  form_type: string;
+  form_word: string;
+  created_at: Date;
+  updated_at: Date;
 }
 
-export interface DefinitionExampleRecord {
+// 直接使用原始类型作为接口名
+export type WordFormRecord = WordFormRecordRaw;
+
+export interface DefinitionExampleRecordRaw {
   id: number;
-  definitionId: number;
+  definition_id: number;
   order: number;
   chinese: string;
   english: string;
-  createdAt: Date;
-  updatedAt: Date;
+  created_at: Date;
+  updated_at: Date;
 }
 
-export interface DefinitionIdiomRecord {
+// 直接使用原始类型作为接口名
+export type DefinitionExampleRecord = DefinitionExampleRecordRaw;
+
+export interface DefinitionIdiomRecordRaw {
   id: number;
-  definitionId: number;
+  definition_id: number;
   title: string;
   meaning: string;
   order: number;
-  createdAt: Date;
-  updatedAt: Date;
+  created_at: Date;
+  updated_at: Date;
 }
 
-export interface IdiomExampleRecord {
+// 直接使用原始类型作为接口名
+export type DefinitionIdiomRecord = DefinitionIdiomRecordRaw;
+
+export interface IdiomExampleRecordRaw {
   id: number;
-  idiomId: number;
+  idiom_id: number;
   english: string;
   chinese: string;
-  createdAt: Date;
-  updatedAt: Date;
+  created_at: Date;
+  updated_at: Date;
 }
+
+// 直接使用原始类型作为接口名
+export type IdiomExampleRecord = IdiomExampleRecordRaw;
 
 export interface WordDataAssembled extends WordDataWithId {
   pronunciations: PronunciationRecord[];
