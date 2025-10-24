@@ -11,7 +11,10 @@
     "migration:validate": "ts-node scripts/run-migration.ts validate",
     "migration:repair": "ts-node scripts/run-migration.ts repair",
     "migration:full": "ts-node scripts/run-migration.ts full-process",
-    "migration:test": "ts-node scripts/test-migration.ts"
+    "migration:test": "ts-node scripts/test-migration.ts",
+    "db:clear": "ts-node scripts/clear-database.ts",
+    "db:clear:dry": "ts-node scripts/clear-database.ts --dry-run",
+    "db:reset": "npm run db:clear && npm run migration:full"
   },
   "dependencies": {
     "@prisma/client": "^6.17.1",
