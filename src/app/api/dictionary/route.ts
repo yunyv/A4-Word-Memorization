@@ -546,23 +546,64 @@ function convertTablesToJson(word: WordDataAssembled): WordDefinitionData | null
 
   // 处理释义数据
   if (word.definitions && word.definitions.length > 0) {
+    // 首先按类型和词性分组处理
+    const groupedDefinitions = new Map<string, Map<string, typeof word.definitions>>();
+
     word.definitions.forEach((def) => {
-      if (def.type === 'basic') {
-        result.definitions!.basic!.push({
-          partOfSpeech: def.partOfSpeech || '',
-          meaning: def.meaning || ''
+      const type = def.type;
+      if (!groupedDefinitions.has(type)) {
+        groupedDefinitions.set(type, new Map());
+      }
+
+      const typeGroup = groupedDefinitions.get(type)!;
+      const partOfSpeech = def.partOfSpeech || '';
+
+      if (!typeGroup.has(partOfSpeech)) {
+        typeGroup.set(partOfSpeech, []);
+      }
+
+      typeGroup.get(partOfSpeech)!.push(def);
+    });
+
+    // 处理基本释义
+    const basicDefs = groupedDefinitions.get('basic');
+    if (basicDefs) {
+      basicDefs.forEach((defs, partOfSpeech) => {
+        defs.forEach((def) => {
+          result.definitions!.basic!.push({
+            partOfSpeech: partOfSpeech,
+            meaning: def.meaning || ''
+          });
         });
-      } else if (def.type === 'web') {
-        result.definitions!.web!.push({
-          meaning: def.meaning || ''
+      });
+    }
+
+    // 处理网络释义
+    const webDefs = groupedDefinitions.get('web');
+    if (webDefs) {
+      webDefs.forEach((defs) => {
+        defs.forEach((def) => {
+          result.definitions!.web!.push({
+            meaning: def.meaning || ''
+          });
         });
-      } else if (def.type === 'authoritative') {
+      });
+    }
+
+    // 处理权威英汉释义
+    const authoritativeDefs = groupedDefinitions.get('authoritative');
+    if (authoritativeDefs) {
+      authoritativeDefs.forEach((defs, partOfSpeech) => {
         const authDef: {
           partOfSpeech: string;
           definitions: Array<{
             number: number;
             chineseMeaning: string;
             englishMeaning: string;
+            examples?: Array<{
+              english: string;
+              chinese: string;
+            }>;
           }>;
           idioms?: Array<{
             number: number;
@@ -574,39 +615,47 @@ function convertTablesToJson(word: WordDataAssembled): WordDefinitionData | null
             }>;
           }>;
         } = {
-          partOfSpeech: def.partOfSpeech || '',
+          partOfSpeech,
           definitions: []
         };
 
-        // 处理释义条目 - 修复：从 DefinitionExamples 表中提取释义（不是例句）
-        const examples = word.definitionExamples?.filter((ex) => ex.definitionId === def.id);
-        if (examples && examples.length > 0) {
-          examples.forEach((example) => {
-            // 对于权威英汉释义，需要同时有中英文
-            if (example.chinese && example.english) {
-              // 判断是否是释义而不是例句
-              // 规则1：中文包含分号、顿号通常是释义
-              // 规则2：中文很短（<30字符）且英文以小写开头通常是释义
-              // 规则3：英文不是完整句子（没有主谓宾结构）通常是释义
-              const isDefinition =
-                example.chinese.includes('；') ||
-                example.chinese.includes('、') ||
-                (example.chinese.length < 30 && !/^[A-Z]/.test(example.english)) ||
-                (example.chinese.length < 20 && example.english.split(' ').length <= 4);
+        // 处理普通释义条目
+        defs.forEach((def) => {
+          // 检查是否是习语（通过查看是否有对应的习语记录）
+          const hasIdiomRecord = word.definitionIdioms?.some(idiom => idiom.definitionId === def.id);
 
-              if (isDefinition) {
-                authDef.definitions.push({
-                  number: example.order,
-                  chineseMeaning: example.chinese,
-                  englishMeaning: example.english
-                });
-              }
+          if (!hasIdiomRecord && (def.chinese_meaning || def.english_meaning)) {
+            const definitionItem: {
+              number: number;
+              chineseMeaning: string;
+              englishMeaning: string;
+              examples?: Array<{
+                english: string;
+                chinese: string;
+              }>;
+            } = {
+              number: def.definition_number || def.order || 0,
+              chineseMeaning: def.chinese_meaning || '',
+              englishMeaning: def.english_meaning || ''
+            };
+
+            // 获取该释义的例句
+            const examples = word.definitionExamples?.filter((ex) => ex.definitionId === def.id);
+            if (examples && examples.length > 0) {
+              definitionItem.examples = examples.map((example) => ({
+                english: example.english,
+                chinese: example.chinese
+              }));
             }
-          });
-        }
+
+            authDef.definitions.push(definitionItem);
+          }
+        });
 
         // 处理习语
-        const idioms = word.definitionIdioms?.filter((id) => id.definitionId === def.id);
+        const idioms = word.definitionIdioms?.filter((id) =>
+          defs.some(def => def.id === id.definitionId)
+        );
         if (idioms && idioms.length > 0) {
           authDef.idioms = [];
           idioms.forEach((idiom) => {
@@ -637,35 +686,70 @@ function convertTablesToJson(word: WordDataAssembled): WordDefinitionData | null
           });
         }
 
-        result.authoritativeDefinitions!.push(authDef);
-      } else if (def.type === 'bilingual') {
+        // 只添加有内容的释义
+        if (authDef.definitions.length > 0 || (authDef.idioms && authDef.idioms.length > 0)) {
+          result.authoritativeDefinitions!.push(authDef);
+        }
+      });
+    }
+
+    // 处理英汉释义
+    const bilingualDefs = groupedDefinitions.get('bilingual');
+    if (bilingualDefs) {
+      bilingualDefs.forEach((defs, partOfSpeech) => {
         const bilDef: {
             partOfSpeech: string;
             definitions: Array<{
               number: number;
               meaning: string;
+              examples?: Array<{
+                english: string;
+                chinese: string;
+              }>;
             }>;
           } = {
-          partOfSpeech: def.partOfSpeech || '',
+          partOfSpeech,
           definitions: []
         };
 
-        // 处理释义条目 - 修复：释义数据存储在 DefinitionExamples 表中
-        const examples = word.definitionExamples?.filter((ex) => ex.definitionId === def.id);
-        if (examples && examples.length > 0) {
-          examples.forEach((example) => {
-            // 对于英汉释义，只需要中文释义
-            if (example.chinese) {
-              bilDef.definitions.push({
-                number: example.order,
-                meaning: example.chinese
-              });
-            }
-          });
-        }
+        defs.forEach((def) => {
+          if (def.chinese_meaning) {
+            const definitionItem: {
+              number: number;
+              meaning: string;
+              examples?: Array<{
+                english: string;
+                chinese: string;
+              }>;
+            } = {
+              number: def.definition_number || def.order || 0,
+              meaning: def.chinese_meaning
+            };
 
-        result.bilingualDefinitions!.push(bilDef);
-      } else if (def.type === 'english') {
+            // 获取该释义的例句
+            const examples = word.definitionExamples?.filter((ex) => ex.definitionId === def.id);
+            if (examples && examples.length > 0) {
+              definitionItem.examples = examples.map((example) => ({
+                english: example.english,
+                chinese: example.chinese
+              }));
+            }
+
+            bilDef.definitions.push(definitionItem);
+          }
+        });
+
+        // 只添加有内容的释义
+        if (bilDef.definitions.length > 0) {
+          result.bilingualDefinitions!.push(bilDef);
+        }
+      });
+    }
+
+    // 处理英英释义
+    const englishDefs = groupedDefinitions.get('english');
+    if (englishDefs) {
+      englishDefs.forEach((defs, partOfSpeech) => {
         const engDef: {
             partOfSpeech: string;
             definitions: Array<{
@@ -674,21 +758,25 @@ function convertTablesToJson(word: WordDataAssembled): WordDefinitionData | null
               linkedWords?: string[];
             }>;
           } = {
-          partOfSpeech: def.partOfSpeech || '',
+          partOfSpeech,
           definitions: []
         };
 
-        if (def.meaning) {
-          engDef.definitions.push({
-            number: def.order || 0,
-            meaning: def.meaning,
-            linkedWords: def.linkedWords ? JSON.parse(def.linkedWords) : undefined
-          });
-        }
+        defs.forEach((def) => {
+          if (def.meaning) {
+            engDef.definitions.push({
+              number: def.order || 0,
+              meaning: def.meaning,
+              linkedWords: def.linkedWords ? JSON.parse(def.linkedWords) : undefined
+            });
+          }
+        });
 
-        result.englishDefinitions!.push(engDef);
-      }
-    });
+        if (engDef.definitions.length > 0) {
+          result.englishDefinitions!.push(engDef);
+        }
+      });
+    }
   }
 
   // 处理例句数据

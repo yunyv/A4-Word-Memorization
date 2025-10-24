@@ -1824,7 +1824,7 @@ private delay(ms: number): Promise<void> {
   private async saveAuthoritativeDefinitions(tx: PrismaTransaction, wordId: number, authoritativeDefinitions: AuthoritativeDefinition[]): Promise<void> {
     console.log(`[DEBUG] 保存权威英汉释义，wordId: ${wordId}`);
     console.log(`[DEBUG] 权威英汉释义数量: ${authoritativeDefinitions.length}`);
-    
+
     for (let authIndex = 0; authIndex < authoritativeDefinitions.length; authIndex++) {
       const authDef = authoritativeDefinitions[authIndex];
       console.log(`[DEBUG] 处理权威英汉释义 ${authIndex + 1}/${authoritativeDefinitions.length}:`, {
@@ -1832,187 +1832,177 @@ private delay(ms: number): Promise<void> {
         definitionsCount: authDef.definitions?.length || 0,
         idiomsCount: authDef.idioms?.length || 0
       });
-      
+
       try {
-        // 创建主释义记录
-        console.log(`[DEBUG] 创建主释义记录，词性: ${authDef.partOfSpeech}`);
-        const definition = await tx.wordDefinition.create({
-          data: {
-            wordId,
-            type: 'authoritative',
-            partOfSpeech: authDef.partOfSpeech,
-            order: 0 // 可以根据需要调整排序
-          }
-        });
-        console.log(`[DEBUG] 主释义记录已创建，ID: ${definition.id}`);
+        // 为每个释义条目创建单独的 WordDefinition 记录
+        console.log(`[DEBUG] 创建权威英汉释义记录，词性: ${authDef.partOfSpeech}`);
 
         // 创建释义条目
-        console.log(`[DEBUG] 创建释义条目，数量: ${authDef.definitions?.length || 0}`);
+        if (authDef.definitions && authDef.definitions.length > 0) {
+          console.log(`[DEBUG] 创建释义条目，数量: ${authDef.definitions.length}`);
 
-        // 准备释义条目数据
-        const definitionExamples: Array<{
-          definitionId: number;
-          order: number;
-          english: string;
-          chinese: string;
-        }> = [];
+          for (let defIndex = 0; defIndex < authDef.definitions.length; defIndex++) {
+            const defItem = authDef.definitions[defIndex];
+            console.log(`[DEBUG] 创建释义条目 ${defIndex + 1}/${authDef.definitions.length}:`, {
+              number: defItem.number,
+              hasEnglish: !!defItem.englishMeaning,
+              hasChinese: !!defItem.chineseMeaning,
+              hasExamples: defItem.examples?.length || 0
+            });
 
-        // 准备释义例句数据
-        const definitionExampleSentences: Array<{
-          definitionId: number;
-          order: number;
-          english: string;
-          chinese: string;
-        }> = [];
-
-        // 收集所有释义条目和例句数据
-        for (let defIndex = 0; defIndex < authDef.definitions.length; defIndex++) {
-          const defItem = authDef.definitions[defIndex];
-          console.log(`[DEBUG] 准备释义条目 ${defIndex + 1}/${authDef.definitions.length}:`, {
-            number: defItem.number,
-            hasEnglish: !!defItem.englishMeaning,
-            hasChinese: !!defItem.chineseMeaning,
-            hasExamples: defItem.examples?.length || 0
-          });
-
-          // 添加释义条目
-          definitionExamples.push({
-            definitionId: definition.id,
-            order: defItem.number,
-            english: defItem.englishMeaning || '',
-            chinese: defItem.chineseMeaning || ''
-          });
-
-          // 如果有例句，收集例句数据
-          if (defItem.examples && defItem.examples.length > 0) {
-            console.log(`[DEBUG] 收集释义例句，数量: ${defItem.examples.length}`);
-            for (let exIndex = 0; exIndex < defItem.examples.length; exIndex++) {
-              const example = defItem.examples[exIndex];
-              definitionExampleSentences.push({
-                definitionId: definition.id,
+            // 创建主释义记录，直接存储中英文释义
+            const definition = await tx.wordDefinition.create({
+              data: {
+                wordId,
+                type: 'authoritative',
+                partOfSpeech: authDef.partOfSpeech,
                 order: defItem.number,
+                chineseMeaning: defItem.chineseMeaning || '',
+                englishMeaning: defItem.englishMeaning || '',
+                definitionNumber: defItem.number
+              }
+            });
+            console.log(`[DEBUG] 释义记录已创建，ID: ${definition.id}`);
+
+            // 保存释义例句（如果有的话）
+            if (defItem.examples && defItem.examples.length > 0) {
+              console.log(`[DEBUG] 保存释义例句，数量: ${defItem.examples.length}`);
+
+              const definitionExamples = defItem.examples.map((example, exIndex) => ({
+                definitionId: definition.id,
+                order: exIndex + 1,
                 english: example.english,
                 chinese: example.chinese
-              });
+              }));
+
+              if (definitionExamples.length > 0) {
+                await tx.definitionExample.createMany({
+                  data: definitionExamples,
+                  skipDuplicates: true
+                });
+                console.log(`[DEBUG] ${definitionExamples.length} 个释义例句已创建`);
+              }
             }
           }
-        }
-
-        // 批量插入释义条目
-        if (definitionExamples.length > 0) {
-          await tx.definitionExample.createMany({
-            data: definitionExamples,
-            skipDuplicates: true
-          });
-          console.log(`[DEBUG] ${definitionExamples.length} 个释义条目已批量创建`);
-        }
-
-        // 批量插入释义例句
-        if (definitionExampleSentences.length > 0) {
-          await tx.definitionExample.createMany({
-            data: definitionExampleSentences,
-            skipDuplicates: true
-          });
-          console.log(`[DEBUG] ${definitionExampleSentences.length} 个释义例句已批量创建`);
         }
 
         // 处理习语
         if (authDef.idioms && authDef.idioms.length > 0) {
           console.log(`[DEBUG] 处理习语，数量: ${authDef.idioms.length}`);
 
-          // 准备习语数据
-          const idiomsToCreate = authDef.idioms.map(idiom => ({
-            definitionId: definition.id,
-            order: idiom.number,
-            title: idiom.title,
-            meaning: idiom.meaning
-          }));
-
-          // 批量创建习语记录
-          const createdIdioms = await Promise.all(
-            idiomsToCreate.map(async (idiomData) => {
-              const idiom = await tx.definitionIdiom.create({
-                data: idiomData
-              });
-              console.log(`[DEBUG] 习语记录已创建，ID: ${idiom.id}`);
-              return { idiom, originalData: idiomData };
-            })
-          );
-
-          // 准备习语例句数据
-          const idiomExamples: Array<{
-            idiomId: number;
-            order: number;
-            english: string;
-            chinese: string;
-          }> = [];
-
-          // 收集所有习语例句
           for (let idiomIndex = 0; idiomIndex < authDef.idioms.length; idiomIndex++) {
             const idiom = authDef.idioms[idiomIndex];
-            const createdIdiom = createdIdioms[idiomIndex].idiom;
+            console.log(`[DEBUG] 创建习语 ${idiomIndex + 1}/${authDef.idioms.length}:`, {
+              number: idiom.number,
+              title: idiom.title,
+              meaning: idiom.meaning,
+              hasExamples: idiom.examples?.length || 0
+            });
 
+            // 为每个习语创建一个独立的释义记录
+            const idiomDefinition = await tx.wordDefinition.create({
+              data: {
+                wordId,
+                type: 'authoritative',
+                partOfSpeech: authDef.partOfSpeech,
+                order: idiom.number,
+                chineseMeaning: idiom.meaning,
+                englishMeaning: '', // 习语主要是中文释义
+                definitionNumber: idiom.number
+              }
+            });
+            console.log(`[DEBUG] 习语释义记录已创建，ID: ${idiomDefinition.id}`);
+
+            // 创建习语记录
+            const idiomRecord = await tx.definitionIdiom.create({
+              data: {
+                definitionId: idiomDefinition.id,
+                order: idiom.number,
+                title: idiom.title,
+                meaning: idiom.meaning
+              }
+            });
+            console.log(`[DEBUG] 习语记录已创建，ID: ${idiomRecord.id}`);
+
+            // 处理习语例句
             if (idiom.examples && idiom.examples.length > 0) {
-              console.log(`[DEBUG] 收集习语例句，数量: ${idiom.examples.length}`);
-              for (let exIndex = 0; exIndex < idiom.examples.length; exIndex++) {
-                const example = idiom.examples[exIndex];
-                idiomExamples.push({
-                  idiomId: createdIdiom.id,
-                  order: 0,
-                  english: example.english,
-                  chinese: example.chinese
+              console.log(`[DEBUG] 处理习语例句，数量: ${idiom.examples.length}`);
+
+              const idiomExamples = idiom.examples.map((example, exIndex) => ({
+                idiomId: idiomRecord.id,
+                order: exIndex + 1,
+                english: example.english,
+                chinese: example.chinese
+              }));
+
+              if (idiomExamples.length > 0) {
+                await tx.idiomExample.createMany({
+                  data: idiomExamples,
+                  skipDuplicates: true
                 });
+                console.log(`[DEBUG] ${idiomExamples.length} 个习语例句已创建`);
               }
             }
           }
-
-          // 批量创建习语例句
-          if (idiomExamples.length > 0) {
-            await tx.idiomExample.createMany({
-              data: idiomExamples,
-              skipDuplicates: true
-            });
-            console.log(`[DEBUG] ${idiomExamples.length} 个习语例句已批量创建`);
-          }
         }
-        
+
         console.log(`[DEBUG] 权威英汉释义 ${authIndex + 1} 处理完成`);
       } catch (error) {
         console.error(`[ERROR] 处理权威英汉释义 ${authIndex + 1} 时出错:`, error);
         throw error;
       }
     }
-    
+
     console.log(`[DEBUG] 所有权威英汉释义保存完成`);
   }
 
   private async saveBilingualDefinitions(tx: PrismaTransaction, wordId: number, bilingualDefinitions: BilingualDefinition[]): Promise<void> {
-    for (const bilDef of bilingualDefinitions) {
-      const definition = await tx.wordDefinition.create({
-        data: {
-          wordId,
-          type: 'bilingual',
-          partOfSpeech: bilDef.partOfSpeech,
-          order: 0
-        }
+    console.log(`[DEBUG] 保存英汉释义，wordId: ${wordId}`);
+    console.log(`[DEBUG] 英汉释义数量: ${bilingualDefinitions.length}`);
+
+    for (let bilIndex = 0; bilIndex < bilingualDefinitions.length; bilIndex++) {
+      const bilDef = bilingualDefinitions[bilIndex];
+      console.log(`[DEBUG] 处理英汉释义 ${bilIndex + 1}/${bilingualDefinitions.length}:`, {
+        partOfSpeech: bilDef.partOfSpeech,
+        definitionsCount: bilDef.definitions?.length || 0
       });
 
-      // 准备释义条目数据
-      const definitionExamples = bilDef.definitions.map(defItem => ({
-        definitionId: definition.id,
-        order: defItem.number,
-        english: '',
-        chinese: defItem.meaning
-      }));
+      try {
+        // 为每个释义条目创建单独的 WordDefinition 记录
+        if (bilDef.definitions && bilDef.definitions.length > 0) {
+          console.log(`[DEBUG] 创建英汉释义条目，数量: ${bilDef.definitions.length}`);
 
-      // 批量创建释义条目
-      if (definitionExamples.length > 0) {
-        await tx.definitionExample.createMany({
-          data: definitionExamples,
-          skipDuplicates: true
-        });
+          for (let defIndex = 0; defIndex < bilDef.definitions.length; defIndex++) {
+            const defItem = bilDef.definitions[defIndex];
+            console.log(`[DEBUG] 创建英汉释义条目 ${defIndex + 1}/${bilDef.definitions.length}:`, {
+              number: defItem.number,
+              meaning: defItem.meaning
+            });
+
+            // 创建主释义记录，直接存储中文释义
+            const definition = await tx.wordDefinition.create({
+              data: {
+                wordId,
+                type: 'bilingual',
+                partOfSpeech: bilDef.partOfSpeech,
+                order: defItem.number,
+                chineseMeaning: defItem.meaning || '',
+                englishMeaning: '', // 英汉释义主要是中文释义
+                definitionNumber: defItem.number
+              }
+            });
+            console.log(`[DEBUG] 英汉释义记录已创建，ID: ${definition.id}`);
+          }
+        }
+
+        console.log(`[DEBUG] 英汉释义 ${bilIndex + 1} 处理完成`);
+      } catch (error) {
+        console.error(`[ERROR] 处理英汉释义 ${bilIndex + 1} 时出错:`, error);
+        throw error;
       }
     }
+
+    console.log(`[DEBUG] 所有英汉释义保存完成`);
   }
 
   private async saveEnglishDefinitions(tx: PrismaTransaction, wordId: number, englishDefinitions: EnglishDefinition[]): Promise<void> {

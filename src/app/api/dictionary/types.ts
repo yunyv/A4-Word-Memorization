@@ -26,6 +26,9 @@ export interface DefinitionRecord {
   type: string;
   partOfSpeech?: string | null;
   meaning?: string | null;
+  chinese_meaning?: string | null; // 数据库字段名
+  english_meaning?: string | null; // 数据库字段名
+  definition_number?: number | null; // 数据库字段名
   order?: number;
   linkedWords?: string | null;
   createdAt: Date;
