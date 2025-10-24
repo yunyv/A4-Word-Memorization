@@ -82,12 +82,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### 核心功能
 
 - 令牌认证系统（无需注册）
-- 词书管理和上传
-- 艾宾浩斯记忆曲线算法
+- 词书管理和上传（支持 .txt/.csv 文件）
+- 艾宾浩斯记忆曲线算法（递进式复习阶段管理）
 - 多种学习模式（新词学习、复习、测试）
 - 多源词典集成（基础释义、权威释义、英汉释义、英英释义、网络释义）
-- 学习进度跟踪和统计
+- 学习进度跟踪和统计（详细进度可视化）
 - 响应式设计和用户设置管理
+- 智能缓存系统（减少外部 API 调用）
+- 数据迁移和修复工具
 
 ## 开发命令
 
@@ -108,15 +110,26 @@ npx prisma db push   # 推送数据库模式变更
 npx prisma studio    # 打开数据库管理界面
 ```
 
+### 数据迁移工具
+
+```bash
+npm run migration:migrate     # 执行数据迁移
+npm run migration:validate   # 验证数据完整性
+npm run migration:repair     # 修复数据问题
+npm run migration:full       # 完整迁移流程（验证+迁移+修复）
+npm run migration:test       # 测试迁移脚本
+```
+
 ## 技术栈
 
-- **前端**: Next.js 15 (App Router), React 19, TypeScript
-- **样式**: Tailwind CSS 4, Radix UI 组件
+- **前端**: Next.js 15 (App Router), React 19, TypeScript 5
+- **样式**: Tailwind CSS 4, Radix UI 组件, Lucide React 图标
 - **后端**: Next.js API Routes
-- **数据库**: Prisma ORM with MySQL
-- **认证**: 令牌认证系统
-- **爬虫**: Cheerio, Axios
-- **缓存**: 本地存储和 API 缓存
+- **数据库**: MySQL 8.0 with Prisma ORM 6.17.1
+- **认证**: 自定义令牌认证系统（无需注册）
+- **爬虫**: Cheerio 1.1.2, Axios 1.12.2, XPath 解析
+- **缓存**: 本地存储和 API 缓存系统
+- **开发工具**: ESLint 9, ts-node, Commander.js（CLI 工具）
 
 ## 架构概览
 
@@ -126,18 +139,41 @@ npx prisma studio    # 打开数据库管理界面
 src/
 ├── app/                    # Next.js App Router 页面
 │   ├── api/               # API 路由（按领域组织）
+│   │   ├── cache/         # 缓存管理 API
+│   │   ├── dictionary/    # 词典爬取 API
+│   │   ├── learning/      # 学习会话 API
+│   │   ├── review/        # 复习进度 API
+│   │   ├── token/         # 令牌验证 API
+│   │   ├── wordlists/     # 词书管理 API
+│   │   └── words/         # 单词查询 API
 │   ├── dashboard/         # 仪表盘功能
 │   ├── learning/          # 学习模块
+│   │   └── focus/         # 专注学习界面
 │   ├── settings/          # 用户设置
 │   └── token/             # 令牌认证页面
 ├── components/            # React 组件
-│   ├── ui/                # 基础 UI 组件
+│   ├── ui/                # 基础 UI 组件（Shadcn/ui）
 │   ├── auth/              # 认证相关组件
 │   ├── dashboard/         # 仪表盘组件
 │   └── learning/          # 学习界面组件
 ├── hooks/                 # 自定义 React hooks
+│   ├── useAuth.ts         # 认证状态管理
+│   ├── useLearning.ts     # 学习进度管理
+│   ├── useWordlist.ts     # 词书管理
+│   └── useDefinitionSettings.ts # 释义设置
 ├── lib/                   # 业务逻辑工具
-└── types/                 # TypeScript 类型定义
+│   ├── auth.ts            # 认证逻辑
+│   ├── cacheUtils.ts      # 缓存工具
+│   ├── db.ts              # 数据库连接
+│   ├── dictionary.ts      # 词典爬虫
+│   ├── definitionSettings.ts # 释义设置
+│   └── utils.ts           # 通用工具
+├── types/                 # TypeScript 类型定义
+└── scripts/               # 数据迁移脚本
+    ├── enhanced-migrate-word-data.ts
+    ├── enhanced-data-validator.ts
+    ├── data-cleanup-and-repair.ts
+    └── run-migration.ts
 ```
 
 ### 路径别名
@@ -150,12 +186,16 @@ src/
 
 API 路由按领域组织，遵循 RESTful 约定：
 
-- `/api/token` - 用户认证和管理
+- `/api/token/validate` - 令牌验证
 - `/api/wordlists` - 词书 CRUD 操作
-- `/api/dictionary` - 单词释义爬取和缓存
-- `/api/learning` - 学习会话管理
-- `/api/review` - 进度跟踪和调度
-- `/api/cache` - 缓存管理工具
+- `/api/wordlists/[id]` - 特定词书操作
+- `/api/dictionary` - 词典查询和缓存
+- `/api/dictionary/fetch` - 主动爬取词典
+- `/api/learning/initialize` - 学习会话初始化
+- `/api/review/due` - 获取待复习单词
+- `/api/review/progress/[wordId]` - 更新学习进度
+- `/api/cache` - 缓存管理
+- `/api/words/by-text` - 按文本查询单词
 
 ### 2. 组件组织模式
 
@@ -180,21 +220,40 @@ API 路由按领域组织，遵循 RESTful 约定：
 
 ### 核心数据模型
 
-- **User**: 令牌认证用户管理
-- **Wordlist**: 用户词书管理
-- **Word**: 全局单词缓存表
-- **WordDefinition**: 多类型释义存储（basic/web/authoritative/bilingual/english）
-- **WordPronunciation**: 美式/英式发音
-- **WordSentence**: 单词例句
-- **DefinitionExample/DefinitionIdiom**: 释义的例句和习语
-- **UserWordProgress**: 用户学习进度跟踪（艾宾浩斯曲线）
+#### 用户和词书管理
+- **User**: 令牌认证用户管理（id, token, created_at）
+- **Wordlist**: 用户词书管理（id, user_id, name, created_at）
+- **WordlistEntry**: 词书和单词的多对多关联（wordlist_id, word_id）
+
+#### 单词数据体系
+- **Word**: 全局单词缓存表（id, word_text, status, pronunciation）
+  - `status` 字段跟踪数据获取状态（PENDING/PROCESSING/COMPLETED/FAILED）
+- **WordDefinition**: 多类型释义存储
+  - 支持 5 种释义类型：basic/web/authoritative/bilingual/english
+  - 不同类型使用不同的字段结构（meaning, chinese_meaning, english_meaning, linked_words）
+- **WordPronunciation**: 发音数据（american/british 类型，phonetic, audio_url）
+- **WordSentence**: 单词例句（english, chinese, audio_url, source）
+- **WordForm**: 词形变换（plural, past_tense 等形式）
+
+#### 释义扩展数据
+- **DefinitionExample**: 释义例句（按 definition_id 组织，支持排序）
+- **DefinitionIdiom**: 释义习语（title, meaning）
+- **IdiomExample**: 习语例句（与 DefinitionIdiom 关联）
+
+#### 学习系统
+- **UserWordProgress**: 用户学习进度跟踪
+  - review_stage：复习阶段（艾宾浩斯曲线）
+  - next_review_date：下次复习日期
+  - last_reviewed_at：最后复习时间
 
 ### 关键设计特点
 
-- 支持多种释义类型，每种类型有不同的数据结构
-- 层次化数据组织：单词 → 释义 → 例句/习语
-- 用户进度跟踪包含复习阶段和下次复习时间
-- 级联删除保证数据一致性
+- **多源释义支持**: 每种释义类型有不同的数据结构，适应不同词典源
+- **层次化数据组织**: 单词 → 释义 → 例句/习语的清晰层次
+- **智能状态管理**: Word 表的 status 字段支持爬虫状态跟踪
+- **艾宾浩斯算法**: UserWordProgress 实现科学复习调度
+- **级联删除**: 完整的外键约束保证数据一致性
+- **性能优化**: 关键字段建立索引，支持高效查询
 
 ## 开发指南
 
@@ -209,23 +268,63 @@ API 路由按领域组织，遵循 RESTful 约定：
 
 ### 数据库操作原则
 
-- 所有数据库操作通过 Prisma 客户端进行
+- 所有数据库操作通过 Prisma 客户端进行（`src/lib/db.ts`）
 - 修改 schema 后必须运行 `npx prisma generate` 和 `npx prisma db push`
 - 使用事务处理复杂的数据操作
 - 注意级联删除的影响
+- 数据库连接测试：使用 `testDatabaseConnection()` 函数
+
+### 数据迁移工作流程
+
+**数据迁移工具使用场景：**
+- 数据库结构变更后的数据迁移
+- 词典数据格式升级
+- 数据完整性修复
+- 批量数据处理
+
+**标准迁移流程：**
+```bash
+# 1. 验证当前数据状态
+npm run migration:validate
+
+# 2. 执行数据迁移
+npm run migration:migrate
+
+# 3. 修复发现的问题
+npm run migration:repair
+
+# 4. 完整流程（推荐）
+npm run migration:full
+```
+
+**迁移脚本特点：**
+- 支持批处理避免内存溢出
+- 详细的进度监控和日志记录
+- 自动重试机制处理网络问题
+- 数据验证确保迁移完整性
 
 ### 认证系统
 
-- 使用令牌认证，无需用户注册
+- 使用自定义令牌认证，无需用户注册
 - 令牌通过 header 或 cookie 传递
 - 自动用户创建：首次使用令牌时自动创建用户账户
+- 认证逻辑封装在 `src/lib/auth.ts` 和 `useAuth` hook 中
 
 ### 学习算法实现
 
-- 基于艾宾浩斯遗忘曲线的间隔重复
-- 递进式复习阶段管理
-- 根据用户表现智能调度下次复习时间
+- 基于艾宾浩斯遗忘曲线的间隔重复算法
+- 递进式复习阶段管理（review_stage 字段）
+- 智能调度下次复习时间（next_review_date）
 - 支持多种学习模式（新词、复习、测试）
+- 学习状态跟踪通过 `UserWordProgress` 表
+
+### 词典爬虫系统
+
+- 多源词典数据爬取（基础、权威、英汉、英英释义）
+- 爬虫逻辑在 `src/lib/dictionary.ts` 中
+- 状态跟踪避免重复爬取（Word.status 字段）
+- 支持多种解析方式：Cheerio + XPath
+- 缓存机制减少外部 API 调用
 
 ### 缓存策略
 
@@ -233,13 +332,16 @@ API 路由按领域组织，遵循 RESTful 约定：
 - 本地存储优化用户体验
 - 支持预加载词书缓存
 - 可配置的缓存清理机制
+- 缓存工具在 `src/lib/cacheUtils.ts` 中
 
 ### UI/UX 开发
 
 - 响应式设计适配各种设备
-- 使用 Tailwind CSS 保持设计一致性
+- 使用 Tailwind CSS 4 保持设计一致性
 - Radix UI 组件提供可访问性支持
+- Lucide React 图标库
 - 加载状态和错误处理的优雅实现
+- 错误边界组件防止应用崩溃
 
 ## 重要注意事项
 
@@ -248,3 +350,4 @@ API 路由按领域组织，遵循 RESTful 约定：
 - 数据库模式变更需要谨慎处理，考虑数据迁移
 - 词典爬虫功能需要处理各种异常情况和反爬措施
 - 学习算法的准确性直接影响用户体验，需要充分测试
+- 使用数据迁移工具进行大规模数据操作，避免手动 SQL 操作
