@@ -46,7 +46,7 @@ next-env.d.ts
 /.VSCodeCounter
 
 # 设计文档
-"Design Documentation"/
+Design Documentation/
 
 # claude文档
 CLAUDE.md 
