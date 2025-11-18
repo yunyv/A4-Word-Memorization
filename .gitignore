@@ -1,6 +1,4 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-# 忽略设计文档文件夹
-Design Documentation/
 
 # dependencies
 /node_modules
@@ -46,3 +44,4 @@ next-env.d.ts
 
 /src/generated/prisma
 /.VSCodeCounter
+"Design Documentation"/
